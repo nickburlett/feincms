@@ -4,6 +4,7 @@
 
 import re
 import copy
+import inspect
 
 from django import forms, template
 from django.contrib import admin
@@ -14,7 +15,9 @@ from django.shortcuts import render_to_response
 from django.utils.encoding import force_unicode
 from django.utils.functional import curry
 from django.utils.translation import ugettext as _
+from django.utils.importlib import import_module
 from django.contrib.admin.options import InlineModelAdmin
+from django.core.exceptions import ImproperlyConfigured
 
 from feincms import settings, ensure_completely_loaded
 from feincms.signals import itemeditor_post_save_related
@@ -23,6 +26,29 @@ from feincms.signals import itemeditor_post_save_related
 FRONTEND_EDITING_MATCHER = re.compile(r'(\d+)\|(\w+)\|(\d+)')
 FEINCMS_CONTENT_FIELDSET_NAME = 'FEINCMS_CONTENT'
 FEINCMS_CONTENT_FIELDSET = (FEINCMS_CONTENT_FIELDSET_NAME, {'fields': ()})
+
+# ------------------------------------------------------------------------
+def find_model_admin_base_class(klass):
+    if isinstance(klass, basestring):
+        module, attr = klass.rsplit('.', 1)
+        try:
+            mod = import_module(module)
+        except ImportError, e:
+            raise ImproperlyConfigured('Error importing admin base class %s: "%s"' % (klass, e)) 
+        try:
+            klass = getattr(mod, attr)
+        except AttributeError, e:
+            raise ImproperlyConfigured('Error importing admin base class %s: "%s"' % (klass, e)) 
+
+        if not inspect.isclass(klass):
+            raise ImproperlyConfigured("Your FEINCMS_ITEM_EDITOR_ADMIN_BASE_CLASS setting includes %r, but your Python installation doesn't "
+                "support that type of class." % (klass,))
+        else:
+            return klass
+    else:
+        raise ImproperlyConfigured("FEINCMS_ITEM_EDITOR_ADMIN_BASE_CLASS must be basestring")
+
+AdminBaseClass = find_model_admin_base_class( settings.FEINCMS_ITEM_EDITOR_ADMIN_BASE_CLASS )
 
 # ------------------------------------------------------------------------
 class ItemEditorForm(forms.ModelForm):
@@ -46,7 +72,7 @@ class FeinCMSInline(InlineModelAdmin):
     template = 'admin/feincms/content_inline.html'
 
 # ------------------------------------------------------------------------
-class ItemEditor(admin.ModelAdmin):
+class ItemEditor(AdminBaseClass):
     """
     The ``ItemEditor`` is a drop-in replacement for ``ModelAdmin`` with the
     speciality of knowing how to work with :class:`feincms.models.Base`
@@ -186,6 +212,8 @@ class ItemEditor(admin.ModelAdmin):
             'FEINCMS_CONTENT_FIELDSET_NAME': FEINCMS_CONTENT_FIELDSET_NAME,
 
             'FEINCMS_FRONTEND_EDITING': settings.FEINCMS_FRONTEND_EDITING,
+
+            'change_form_template' : super(ItemEditor, self).change_form_template or "admin/change_form.html",
             }
 
         for processor in self.model.feincms_item_editor_context_processors:
