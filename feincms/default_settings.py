@@ -65,6 +65,19 @@ FEINCMS_JQUERY_NO_CONFLICT = getattr(
     False)
 
 # ------------------------------------------------------------------------
+# Settings for the item editor admin module
+
+# Which admin class type to inherit from
+FEINCMS_ITEM_EDITOR_ADMIN_BASE_CLASS = getattr( settings, 
+    "FEINCMS_ITEM_EDITOR_ADMIN_BASE_CLASS", 'django.contrib.admin.ModelAdmin' )
+
+# ------------------------------------------------------------------------
+# Settings for the page module
+
+#: Include ancestors in filtered tree editor lists
+
+
+# ------------------------------------------------------------------------
 # Settings for the page module
 
 #: Include ancestors in filtered tree editor lists
