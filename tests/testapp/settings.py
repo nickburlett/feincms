@@ -1,3 +1,5 @@
+from __future__ import absolute_import, unicode_literals
+
 import os
 
 SITE_ID = 1
@@ -14,6 +16,7 @@ INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
+    'django.contrib.sitemaps',
     'django.contrib.sites',
     'django.contrib.staticfiles',
     'feincms',
@@ -24,7 +27,7 @@ INSTALLED_APPS = [
     'testapp',
 ]
 
-MEDIA_ROOT = '/media/'
+MEDIA_URL = '/media/'
 STATIC_URL = '/static/'
 BASEDIR = os.path.dirname(__file__)
 MEDIA_ROOT = os.path.join(BASEDIR, 'media/')
@@ -39,8 +42,8 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     'django.core.context_processors.i18n',
     'django.core.context_processors.media',
     'django.core.context_processors.static',
-    'django.core.context_processors.request', # request context processor is needed
-    'django.contrib.messages.context_processors.messages',
+    # request context processor is needed
+    'django.core.context_processors.request',
 )
 
 MIDDLEWARE_CLASSES = (
@@ -49,6 +52,5 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.locale.LocaleMiddleware',
+    'django.middleware.locale.LocaleMiddleware'
 )
-

@@ -39,27 +39,27 @@ else which I haven't thought of yet). It provides helper functions,
 which provide ordered lists of page content blocks. That's all.
 
 
-Adding your own content types is extremely easy. Do you like textile
+Adding your own content types is extremely easy. Do you like markdown
 that much, that you'd rather die than using a rich text editor?
 Then add the following code to your project, and you can go on using the
 CMS without being forced to use whatever the developers deemed best:
 
 ::
 
+    from markdown2 import markdown
     from feincms.module.page.models import Page
-    from django.contrib.markup.templatetags.markup import textile
     from django.db import models
 
-    class TextilePageContent(models.Model):
+    class MarkdownPageContent(models.Model):
         content = models.TextField()
 
         class Meta:
             abstract = True
 
         def render(self, **kwargs):
-            return textile(self.content)
+            return markdown(self.content)
 
-    Page.create_content_type(TextilePageContent)
+    Page.create_content_type(MarkdownPageContent)
 
 
 That's it. Not even ten code lines for your own page content type.
@@ -74,8 +74,15 @@ Visit these sites
 
 * FeinCMS Website: http://www.feincms.org/
 * Read the documentation: http://feincms-django-cms.readthedocs.org/
-* See the google groups page at http://groups.google.com/group/django-feincms
+* See the Google Groups page at http://groups.google.com/group/django-feincms
 * FeinCMS on github: https://github.com/feincms/feincms/
+
+Try out FeinCMS in a Box
+------------------------
+
+`FeinCMS in a Box <https://github.com/matthiask/feincms-in-a-box>`_ is a
+prepackaged installation of FeinCMS with a few additional modules and a setup
+script. Try it out!
 
 IRC
 ---
@@ -97,12 +104,6 @@ Optional Packages
   <http://tidy.sourceforge.net>`_ while editing content. Install pytidylib and
   add ``FEINCMS_TIDY_HTML = True`` to your settings.py.
 
-* Alternately, `lxml <http://pypi.python.org/pypi/lxml>`_ can be installed to perform
-  silent HTML cleanup to remove non-standard markup while editing content.
-  Install lxml and add ``cleanse=True`` when you register ``RichTextContent``
-  or ``SectionContent``::
-
-    RichTextContentType = Page.create_content_type(RichTextContent, cleanse=True)
 
 Repository branches
 -------------------
@@ -121,3 +122,12 @@ rewinding policies are described below.
 * ``pu`` or feature branches are used for short-lived projects. These
   branches aren't guaranteed to stay around and are not meant to be
   deployed into production environments.
+
+
+Travis CI
+=========
+
+.. image:: https://travis-ci.org/feincms/feincms.png?branch=next
+   :target: https://travis-ci.org/feincms/feincms
+.. image:: https://travis-ci.org/feincms/feincms.png?branch=master
+   :target: https://travis-ci.org/feincms/feincms

@@ -1,16 +1,11 @@
+from __future__ import absolute_import, print_function, unicode_literals
+
+import re
 import sys
 
 from django.conf import settings as django_settings
 from django.http import Http404, HttpResponseRedirect
-
-
-def require_path_active_request_processor(page, request):
-    """
-    Checks whether any ancestors are actually inaccessible (ie. not
-    inactive or expired) and raise a 404 if so.
-    """
-    if not page.are_ancestors_active():
-        raise Http404()
+from django.utils.cache import add_never_cache_headers
 
 
 def redirect_request_processor(page, request):
@@ -25,12 +20,34 @@ def redirect_request_processor(page, request):
         raise Http404()
 
 
+def extra_context_request_processor(page, request):
+    """
+    Fills ``request._feincms_extra_context`` with a few useful variables.
+    """
+    request._feincms_extra_context.update({
+        # XXX This variable name isn't accurate anymore.
+        'in_appcontent_subpage': False,
+        'extra_path': '/',
+    })
+
+    url = page.get_absolute_url()
+    if request.path != url:
+        request._feincms_extra_context.update({
+            'in_appcontent_subpage': True,
+            'extra_path': re.sub(
+                '^' + re.escape(url.rstrip('/')),
+                '',
+                request.path,
+            ),
+        })
+
+
 def frontendediting_request_processor(page, request):
     """
     Sets the frontend editing state in the cookie depending on the
     ``frontend_editing`` GET parameter and the user's permissions.
     """
-    if not 'frontend_editing' in request.GET:
+    if 'frontend_editing' not in request.GET:
         return
 
     response = HttpResponseRedirect(request.path)
@@ -41,12 +58,23 @@ def frontendediting_request_processor(page, request):
             enable_fe = False
 
         if enable_fe:
-            response.set_cookie('frontend_editing', enable_fe)
+            response.set_cookie(str('frontend_editing'), enable_fe)
         else:
-            response.delete_cookie('frontend_editing')
+            response.delete_cookie(str('frontend_editing'))
 
     # Redirect to cleanup URLs
     return response
+
+
+def frontendediting_response_processor(page, request, response):
+    # Add never cache headers in case frontend editing is active
+    if (hasattr(request, 'COOKIES')
+            and request.COOKIES.get('frontend_editing', False)):
+
+        if hasattr(response, 'add_post_render_callback'):
+            response.add_post_render_callback(add_never_cache_headers)
+        else:
+            add_never_cache_headers(response)
 
 
 def etag_request_processor(page, request):
@@ -84,7 +112,8 @@ def etag_request_processor(page, request):
     # the net effect is that we will be getting a DummyResponse from
     # the handler if processing is to continue and a non-DummyResponse
     # (should be a "304 not modified") if the etag matches.
-    rsp = condition(etag_func=etagger, last_modified_func=lastmodifier)(dummy_response_handler)(request, page)
+    rsp = condition(etag_func=etagger, last_modified_func=lastmodifier)(
+        dummy_response_handler)(request, page)
 
     # If dummy then don't do anything, if a real response, return and
     # thus shortcut the request processing.
@@ -105,13 +134,14 @@ def etag_response_processor(page, request, response):
 
 def debug_sql_queries_response_processor(verbose=False, file=sys.stderr):
     """
-    Attaches a handler which prints the query count (and optionally all individual queries
-    which have been executed) on the console. Does nothing if ``DEBUG = False``.
+    Attaches a handler which prints the query count (and optionally all
+    individual queries which have been executed) on the console. Does nothing
+    if ``DEBUG = False``.
 
     Example::
 
         from feincms.module.page import models, processors
-        models.Page.register_response_procesors(
+        models.Page.register_response_processor(
             processors.debug_sql_queries_response_processor(verbose=True),
             )
     """
@@ -124,22 +154,24 @@ def debug_sql_queries_response_processor(verbose=False, file=sys.stderr):
         print_sql = lambda x: x
         try:
             import sqlparse
-            print_sql = lambda x: sqlparse.format(x, reindent=True, keyword_case='upper')
+            print_sql = lambda x: sqlparse.format(
+                x, reindent=True, keyword_case='upper')
         except:
             pass
 
         if verbose:
-            print >> file, "--------------------------------------------------------------"
+            print("-" * 60, file=file)
         time = 0.0
         i = 0
         for q in connection.queries:
             i += 1
             if verbose:
-                print >> file, "%d : [%s]\n%s\n" % ( i, q['time'], print_sql(q['sql']))
+                print("%d : [%s]\n%s\n" % (
+                    i, q['time'], print_sql(q['sql'])), file=file)
             time += float(q['time'])
 
-        print >> file, "--------------------------------------------------------------"
-        print >> file, "Total: %d queries, %.3f ms" % (i, time)
-        print >> file, "--------------------------------------------------------------"
+        print("-" * 60, file=file)
+        print("Total: %d queries, %.3f ms" % (i, time), file=file)
+        print("-" * 60, file=file)
 
     return processor

@@ -39,7 +39,10 @@ by adding the following lines somewhere into your project, for example in a
     from feincms.content.richtext.models import RichTextContent
     from feincms.content.medialibrary.models import MediaFileContent
 
-    Page.register_extensions('datepublisher', 'translations') # Example set of extensions
+    Page.register_extensions(
+        'feincms.module.extensions.datepublisher',
+    	'feincms.module.extensions.translations'
+    ) # Example set of extensions
 
     Page.register_templates({
         'title': _('Standard template'),
@@ -47,14 +50,14 @@ by adding the following lines somewhere into your project, for example in a
         'regions': (
             ('main', _('Main content area')),
             ('sidebar', _('Sidebar'), 'inherited'),
-            ),
-        })
+        ),
+    })
 
     Page.create_content_type(RichTextContent)
     Page.create_content_type(MediaFileContent, TYPE_CHOICES=(
         ('default', _('default')),
         ('lightbox', _('lightbox')),
-        ))
+    ))
 
 
 It will be a good idea most of the time to register the
@@ -153,43 +156,45 @@ cluttering up the core page model for those who do not need them. The extensions
 are standard python modules with a :func:`register` method which will be called
 upon registering the extension. The :func:`register` method receives the
 :class:`~feincms.module.page.models.Page` class itself and the model admin class
-:class:`~feincms.module.page.models.PageAdmin` as arguments. The extensions can
+:class:`~feincms.module.page.modeladmins.PageAdmin` as arguments. The extensions can
 be activated as follows::
 
-     Page.register_extensions('navigation', 'titles', 'translations')
+     Page.register_extensions('feincms.module.page.extensions.navigation',
+                              'feincms.module.page.extensions.titles',
+                              'feincms.module.extensions.translations')
 
 
 The following extensions are available currently:
 
-* :mod:`~feincms.module.extensions.changedate` --- Creation and modification dates
+* :mod:`feincms.module.extensions.changedate` --- Creation and modification dates
 
   Adds automatically maintained creation and modification date fields
   to the page.
 
 
-* :mod:`~feincms.module.extensions.ct_tracker` --- Content type cache
+* :mod:`feincms.module.extensions.ct_tracker` --- Content type cache
 
   Helps reduce database queries if you have three or more content types.
 
 
-* :mod:`~feincms.module.extensions.datepublisher` --- Date-based publishing
+* :mod:`feincms.module.extensions.datepublisher` --- Date-based publishing
 
   Adds publication date and end date fields to the page, thereby enabling the
   administrator to define a date range where a page will be available to
   website visitors.
 
 
-* :mod:`~feincms.module.page.extensions.excerpt` --- Page summary
+* :mod:`feincms.module.page.extensions.excerpt` --- Page summary
 
   Add a brief excerpt summarizing the content of this page.
 
 
-* :mod:`~feincms.module.extensions.featured` --- Simple featured flag for a page
+* :mod:`feincms.module.extensions.featured` --- Simple featured flag for a page
 
   Lets administrators set a featured flag that lets you treat that page special.
 
 
-* :mod:`~feincms.module.page.extensions.navigation` --- Navigation extensions
+* :mod:`feincms.module.page.extensions.navigation` --- Navigation extensions
 
   Adds navigation extensions to the page model. You can define subclasses of
   ``NavigationExtension``, which provide submenus to the navigation generation
@@ -197,38 +202,45 @@ The following extensions are available currently:
   this extension.
 
 
-* :mod:`~feincms.module.page.extensions.relatedpages` --- Links related content
+* :mod:`feincms.module.page.extensions.navigationgroups` --- Navigation groups
+
+  Adds a navigation group field to each page which can be used to distinguish
+  between the header and footer (or meta) navigation. Filtering is achieved
+  by passing the ``group`` argument to ``feincms_nav``.
+
+
+* :mod:`feincms.module.page.extensions.relatedpages` --- Links related content
 
   Add a many-to-many relationship field to relate this page to other pages.
 
 
-* :mod:`~feincms.module.extensions.seo` --- Search engine optimization
+* :mod:`feincms.module.extensions.seo` --- Search engine optimization
 
   Adds fields to the page relevant for search engine optimization (SEO),
   currently only meta keywords and description.
 
 
-* :mod:`~feincms.module.page.extensions.sites` --- Limit pages to sites
+* :mod:`feincms.module.page.extensions.sites` --- Limit pages to sites
 
   Allows to limit a page to a certain site and not display it on other sites.
 
 
-* :mod:`~feincms.module.page.extensions.symlinks` --- Symlinked content extension
+* :mod:`feincms.module.page.extensions.symlinks` --- Symlinked content extension
 
   Sometimes you want to reuse all content from a page in another place. This
   extension lets you do that.
 
 
-* :mod:`~feincms.module.page.extensions.titles` --- Additional titles
+* :mod:`feincms.module.page.extensions.titles` --- Additional titles
 
   Adds additional title fields to the page model. You may not only define a
   single title for the page to be used in the navigation, the <title> tag and
   inside the content area, you are not only allowed to define different titles
-  for the three uses but also enabld to define titles and subtitles for the
+  for the three uses but also enabled to define titles and subtitles for the
   content area.
 
 
-* :mod:`~feincms.module.extensions.translations` --- Page translations
+* :mod:`feincms.module.extensions.translations` --- Page translations
 
   Adds a language field and a recursive translations many to many field to the
   page, so that you can define the language the page is in and assign
@@ -262,13 +274,15 @@ request as parameters and returns either None (or nothing) or a HttpResponse.
 All registered request processors are run before the page is actually rendered.
 If the request processor indeed returns a :class:`HttpResponse`, further rendering of
 the page is cut short and this response is returned immediately to the client.
+It is also possible to raise an exception which will be handled like all exceptions
+are handled in Django views.
 
 This allows for various actions dependent on page and request, for example a
 simple user access check can be implemented like this::
 
     def authenticated_request_processor(page, request):
         if not request.user.is_authenticated():
-            return HttpResponseForbidden()
+            raise django.core.exceptions.PermissionDenied
 
     Page.register_request_processor(authenticated_request_processor)
 
@@ -283,12 +297,12 @@ if the ``redirect_to`` page field is filled in).
 Using page response processors
 ==============================
 
-Analogous to a request processor, a reponse processor runs after a page
+Analogous to a request processor, a response processor runs after a page
 has been rendered. It needs to accept the page, the request and the response
 as parameters and may change the response (or throw an exception, but try
 not to).
 
-A reponse processor is the right place to tweak the returned http response
+A response processor is the right place to tweak the returned http response
 for whatever purposes you have in mind.
 
 ::
@@ -305,25 +319,29 @@ exactly like ``register_request_processor`` above. It behaves in the same way.
 WYSIWYG Editors
 ===============
 
-TinyMCE is configured by default to only allow for minimal formatting. This has proven
+TinyMCE 3 is configured by default to only allow for minimal formatting. This has proven
 to be the best compromise between letting the client format text without destroying the
-page design concept. You can customize the TinyMCE settings by creating your own 
+page design concept. You can customize the TinyMCE settings by creating your own
 init_richtext.html that inherits from `admin/content/richtext/init_tinymce.html`.
-You can even set your own css and linklist files like so::
-	
+You can even set your own CSS and linklist files like so::
+
 	FEINCMS_RICHTEXT_INIT_CONTEXT = {
 		'TINYMCE_JS_URL': STATIC_URL + 'your_custom_path/tiny_mce.js',
 		'TINYMCE_CONTENT_CSS_URL': None,  # add your css path here
 		'TINYMCE_LINK_LIST_URL': None  # add your linklist.js path here
 	}
 
-FeinCMS is set up to use TinyMCE_ but you can use CKEditor_ instead if you prefer 
+FeinCMS is set up to use TinyMCE_ 3 but you can use CKEditor_ instead if you prefer
 that one. Change the following settings::
 
 	FEINCMS_RICHTEXT_INIT_TEMPLATE = 'admin/content/richtext/init_ckeditor.html'
 	FEINCMS_RICHTEXT_INIT_CONTEXT = {
 		'CKEDITOR_JS_URL': STATIC_URL + 'path_to_your/ckeditor.js',
 	}
+
+Alternatively, you can also use TinyMCE_ 4 by changing the following setting::
+
+    FEINCMS_RICHTEXT_INIT_TEMPLATE = 'admin/content/richtext/init_tinymce4.html'
 
 .. _TinyMCE: http://www.tinymce.com/
 .. _CKEditor: http://ckeditor.com/
@@ -378,7 +396,7 @@ The following parameters can be used to modify the behaviour of the sitemap:
   in the site map.
 * ``max_depth`` -- if set to a non-negative integer, will limit the sitemap generated
   to this page hierarchy depth.
-* ``changefreq`` -- should be a string or callable specifiying the page update frequency,
+* ``changefreq`` -- should be a string or callable specifying the page update frequency,
   according to the sitemap protocol.
 * ``queryset`` -- pass in a query set to restrict the Pages to include
   in the site map.

@@ -3,9 +3,10 @@ Simple image inclusion content: You should probably use the media library
 instead.
 """
 
+from __future__ import absolute_import, unicode_literals
+
 import os
 
-from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.template.loader import render_to_string
 from django.utils.translation import ugettext_lazy as _
@@ -24,11 +25,12 @@ class ImageContent(models.Model):
         Cls.create_content_type(
             ImageContent,
             POSITION_CHOICES=(
-                ('left', 'Left'),
-                ('right', 'Right'),
+                ('left', 'Float to left'),
+                ('right', 'Float to right'),
+                ('block', 'Block'),
             ),
             FORMAT_CHOICES=(
-                ('', 'Do not resize'),
+                ('noop', 'Do not resize'),
                 ('cropscale:100x100', 'Square Thumbnail'),
                 ('cropscale:200x450', 'Medium Portait'),
                 ('thumbnail:1000x1000', 'Large'),
@@ -36,7 +38,8 @@ class ImageContent(models.Model):
 
         Note that FORMAT_CHOICES is optional. The part before the colon
         corresponds to the template filters in the ``feincms_thumbnail``
-        template filter library.
+        template filter library. Known values are ``cropscale`` and
+        ``thumbnail``. Everything else (such as ``noop``) is ignored.
     """
 
     image = models.ImageField(
@@ -53,10 +56,14 @@ class ImageContent(models.Model):
         verbose_name_plural = _('images')
 
     def render(self, **kwargs):
-        return render_to_string([
-            'content/image/%s.html' % self.position,
-            'content/image/default.html',
-            ], {'content': self}, context_instance=kwargs.get('context'))
+        templates = ['content/image/default.html']
+        if hasattr(self, 'position'):
+            templates.insert(0, 'content/image/%s.html' % self.position)
+        return render_to_string(
+            templates,
+            {'content': self},
+            context_instance=kwargs.get('context'),
+        )
 
     def get_image(self):
         type, separator, size = getattr(self, 'format', '').partition(':')
@@ -65,21 +72,17 @@ class ImageContent(models.Model):
 
         thumbnailer = {
             'cropscale': feincms_thumbnail.CropscaleThumbnailer,
-            }.get(type, feincms_thumbnail.Thumbnailer)
+        }.get(type, feincms_thumbnail.Thumbnailer)
         return thumbnailer(self.image, size)
 
     @classmethod
     def initialize_type(cls, POSITION_CHOICES=None, FORMAT_CHOICES=None):
-        if POSITION_CHOICES is None:
-            raise ImproperlyConfigured(
-                'You need to set POSITION_CHOICES when creating a %s' %
-                cls.__name__)
-
-        models.CharField(
-            _('position'),
-            max_length=10,
-            choices=POSITION_CHOICES,
-            default=POSITION_CHOICES[0][0]
+        if POSITION_CHOICES:
+            models.CharField(
+                _('position'),
+                max_length=10,
+                choices=POSITION_CHOICES,
+                default=POSITION_CHOICES[0][0]
             ).contribute_to_class(cls, 'position')
 
         if FORMAT_CHOICES:
@@ -88,4 +91,4 @@ class ImageContent(models.Model):
                 max_length=64,
                 choices=FORMAT_CHOICES,
                 default=FORMAT_CHOICES[0][0]
-                ).contribute_to_class(cls, 'format')
+            ).contribute_to_class(cls, 'format')

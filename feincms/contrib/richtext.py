@@ -1,3 +1,5 @@
+from __future__ import absolute_import, unicode_literals
+
 from django import forms
 from django.db import models
 
@@ -20,15 +22,17 @@ class RichTextField(models.TextField):
     rich text instead of plain text in the item editor.
     """
     def formfield(self, form_class=RichTextFormField, **kwargs):
-        return super(RichTextField, self).formfield(form_class=form_class, **kwargs)
+        return super(RichTextField, self).formfield(
+            form_class=form_class, **kwargs)
 
 
 try:
     from south.modelsinspector import add_introspection_rules
 
-    RichTextField_introspection_rule = ( (RichTextField,), [], {}, )
+    RichTextField_introspection_rule = ((RichTextField,), [], {},)
 
-    add_introspection_rules(rules=[RichTextField_introspection_rule],
+    add_introspection_rules(
+        rules=[RichTextField_introspection_rule],
         patterns=["^feincms\.contrib\.richtext"])
 except ImportError:
     pass

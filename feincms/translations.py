@@ -14,19 +14,21 @@ Usage example::
         body = models.TextField()
 
 
-Print the titles of all news entries either in the current language (if available)
-or in any other language::
+Print the titles of all news entries either in the current language (if
+available) or in any other language::
 
     for news in News.objects.all():
-        print news.translation.title
+        print(news.translation.title)
 
 Print all the titles of all news entries which have an english translation::
 
     from django.utils import translation
     translation.activate('en')
     for news in News.objects.filter(translations__language_code='en'):
-        print news.translation.title
+        print(news.translation.title)
 """
+
+from __future__ import absolute_import, unicode_literals
 
 from django.conf import settings
 from django.contrib import admin
@@ -35,6 +37,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models import Q
 from django.utils import translation
+from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 
 from feincms.utils import queryset_transform
@@ -49,12 +52,12 @@ class _NoTranslation(object):
 
 def short_language_code(code=None):
     """
-    Extract the short language code from its argument (or return the default language code).
+    Extract the short language code from its argument (or return the default
+    language code).
 
-    >>> from django.conf import settings
-    >>> short_language_code('de')
+    >>> str(short_language_code('de'))
     'de'
-    >>> short_language_code('de-at')
+    >>> str(short_language_code('de-at'))
     'de'
     >>> short_language_code() == short_language_code(settings.LANGUAGE_CODE)
     True
@@ -70,8 +73,9 @@ def short_language_code(code=None):
 
 def is_primary_language(language=None):
     """
-    Returns true if current or passed language is the primary language for this site.
-    (The primary language is defined as the first language in settings.LANGUAGES.)
+    Returns true if current or passed language is the primary language for this
+    site.  (The primary language is defined as the first language in
+    settings.LANGUAGES.)
     """
 
     if not language:
@@ -92,7 +96,8 @@ def lookup_translations(language_code=None):
 
         instance_dict = {}
 
-        # Don't do anything for those who already have a cached translation available
+        # Don't do anything for those who already have a cached translation
+        # available
         for instance in qs:
             trans = cache.get(instance.get_translation_cache_key(lang_))
             if trans:
@@ -107,14 +112,22 @@ def lookup_translations(language_code=None):
         if not instance_dict:
             return
 
-        candidates = instance_dict.values()[0].translations.model._default_manager.all()
+        candidates = list(
+            instance_dict.values()
+        )[0].translations.model._default_manager.all()
 
         if instance_dict:
             _process(candidates, instance_dict, lang_, 'iexact')
         if instance_dict:
-            _process(candidates, instance_dict, settings.LANGUAGE_CODE, 'istartswith')
+            _process(
+                candidates,
+                instance_dict,
+                settings.LANGUAGE_CODE,
+                'istartswith',
+            )
         if instance_dict:
-            for candidate in candidates.filter(parent__pk__in=instance_dict.keys()):
+            for candidate in candidates.filter(
+                    parent__pk__in=instance_dict.keys()):
                 if candidate.parent_id in instance_dict:
                     _found(instance_dict, candidate)
 
@@ -130,12 +143,13 @@ def lookup_translations(language_code=None):
         del instance_dict[candidate.parent_id]
 
     def _process(candidates, instance_dict, lang_, op_):
-        for candidate in candidates.filter(
-                Q(parent__pk__in=instance_dict.keys()),
-                Q(**{'language_code__' + op_: lang_})
-                | Q(**{'language_code__' + op_: short_language_code(lang_)})
-                ).order_by('-language_code'):
+        candidates = candidates.filter(
+            Q(parent__pk__in=instance_dict.keys()),
+            Q(**{'language_code__' + op_: lang_})
+            | Q(**{'language_code__' + op_: short_language_code(lang_)})
+        ).order_by('-language_code')
 
+        for candidate in candidates:
             # The candidate's parent might already have a translation by now
             if candidate.parent_id in instance_dict:
                 _found(instance_dict, candidate)
@@ -158,6 +172,7 @@ class TranslatedObjectManager(queryset_transform.TransformManager):
         return self.filter(translations__language_code=language)
 
 
+@python_2_unicode_compatible
 class TranslatedObjectMixin(object):
     """
     Mixin with helper methods.
@@ -168,13 +183,14 @@ class TranslatedObjectMixin(object):
             return queryset.filter(
                 Q(language_code__iexact=language_code)
                 | Q(language_code__iexact=short_language_code(language_code))
-                ).order_by('-language_code')[0]
+            ).order_by('-language_code')[0]
         except IndexError:
             try:
                 return queryset.filter(
                     Q(language_code__istartswith=settings.LANGUAGE_CODE)
-                    | Q(language_code__istartswith=short_language_code(settings.LANGUAGE_CODE))
-                    ).order_by('-language_code')[0]
+                    | Q(language_code__istartswith=short_language_code(
+                        settings.LANGUAGE_CODE))
+                ).order_by('-language_code')[0]
             except IndexError:
                 try:
                     return queryset.all()[0]
@@ -182,15 +198,20 @@ class TranslatedObjectMixin(object):
                     raise queryset.model.DoesNotExist
 
     def get_translation_cache_key(self, language_code=None):
-        """Return the cache key used to cache this object's translations so we can purge on-demand"""
+        """Return the cache key used to cache this object's translations so we
+        can purge on-demand"""
         if not language_code:
             language_code = translation.get_language()
-        return (('FEINCMS:%d:XLATION:' % settings.SITE_ID) +
-                '-'.join(['%s' % s for s in
-                        self._meta.db_table,
-                        self.id,
-                        language_code,
-                        ]))
+        return (
+            ('FEINCMS:%d:XLATION:' % getattr(settings, 'SITE_ID', 0))
+            + '-'.join(
+                ['%s' % s for s in (
+                    self._meta.db_table,
+                    self.id,
+                    language_code,
+                )]
+            )
+        )
 
     def get_translation(self, language_code=None):
         if not language_code:
@@ -202,7 +223,8 @@ class TranslatedObjectMixin(object):
 
         if trans is None:
             try:
-                trans = self._get_translation_object(self.translations.all(), language_code)
+                trans = self._get_translation_object(
+                    self.translations.all(), language_code)
             except ObjectDoesNotExist:
                 trans = _NoTranslation
             cache.set(key, trans)
@@ -224,14 +246,14 @@ class TranslatedObjectMixin(object):
     def available_translations(self):
         return self.translations.values_list('language_code', flat=True)
 
-    def __unicode__(self):
+    def __str__(self):
         try:
             translation = self.translation
         except ObjectDoesNotExist:
             return self.__class__.__name__
 
         if translation:
-            return unicode(translation)
+            return '%s' % translation
 
         return self.__class__.__name__
 
@@ -256,11 +278,15 @@ def Translation(model):
 
     class Inner(models.Model):
         parent = models.ForeignKey(model, related_name='translations')
-        language_code = models.CharField(_('language'), max_length=10,
-                choices=settings.LANGUAGES, default=settings.LANGUAGES[0][0],
-                editable=len(settings.LANGUAGES) > 1)
+        language_code = models.CharField(
+            _('language'), max_length=10,
+            choices=settings.LANGUAGES, default=settings.LANGUAGES[0][0],
+            editable=len(settings.LANGUAGES) > 1)
 
         class Meta:
+            unique_together = ('parent', 'language_code')
+            # (beware the above will not be inherited automatically if you
+            #  provide a Meta class within your translation subclass)
             abstract = True
 
         def short_language_code(self):
@@ -293,6 +319,8 @@ def admin_translationinline(model, inline_class=admin.StackedInline, **kwargs):
             )
     """
 
+    kwargs['extra'] = 1
     kwargs['max_num'] = len(settings.LANGUAGES)
     kwargs['model'] = model
-    return type(model.__class__.__name__ + 'Inline', (inline_class,), kwargs)
+    return type(
+        str(model.__class__.__name__ + 'Inline'), (inline_class,), kwargs)

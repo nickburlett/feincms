@@ -47,6 +47,8 @@ will be issued for at least two releases.
   the contents of :mod:`feincms.content.medialibrary.v2`. The latter uses
   Django's ``raw_id_fields`` support instead of reimplementing it badly.
 
+* The legacy views inside :mod:`feincms.views.legacy` will be removed.
+
 
 1.8
 ===
@@ -67,7 +69,7 @@ will be issued for at least two releases.
 
       Page.register_extensions(
           'feincms.module.page.extensions.navigation',
-          'feincmc.module.extensions.ct_tracker',
+          'feincms.module.extensions.ct_tracker',
           )
 
 * ``feincms_navigation`` and ``feincms_navigation_extended`` will be removed.
@@ -77,3 +79,31 @@ will be issued for at least two releases.
   anymore. :mod:`feincms.views.generic` and
   :func:`feincms.views.decorators.add_page_to_extra_context` will be removed
   as well.
+
+* The module :mod:`feincms.content.medialibrary.v2`, which is only an alias for
+  :mod:`feincms.content.medialibrary.models` starting with FeinCMS v1.7 will be
+  removed.
+
+* ``Page.setup_request()`` does not do anything anymore and will be removed.
+
+
+1.9
+===
+
+* Fields added through page extensions which haven't been explicitly added
+  to the page model admin using ``modeladmin.add_extension_options`` will
+  disappear from the admin interface. The automatic collection of fields
+  will be removed.
+
+* All extensions should inherit from ``feincms.extensions.Extension``.
+  Support for ``register(cls, admin_cls)``-style functions will be removed
+  in FeinCMS v1.9.
+
+* The ``_feincms_extensions`` attribute on the page model and on models
+  inheriting ``ExtensionsMixin`` is gone.
+
+
+1.10
+====
+
+No deprecations.

@@ -5,9 +5,7 @@ Integrating 3rd party apps into your site
 =========================================
 
 With FeinCMS come a set of standard views which you might want to check
-out before starting to write your own. Included is a standard view for
-pages, and a set of generic view drop-in replacements which know about
-the CMS.
+out before starting to write your own.
 
 
 Default page handler
@@ -152,7 +150,7 @@ Django's standard functionality::
        class Meta:
            ordering = ['-id']
 
-       def __unicode__(self):
+       def __str__(self):
            return self.title
 
        @app_models.permalink
@@ -200,6 +198,7 @@ are returned directly to the client under the following circumstances:
   returns ``True``)
 * The response was explicitly marked as ``standalone`` by the
   :func:`feincms.views.decorators.standalone` view decorator
+  (made easier by mixing-in :class:`feincms.module.mixins.StandaloneView`)
 * The mimetype of the response was not ``text/plain`` or ``text/html``
 
 Otherwise, the content of the response is unpacked and inserted into the
@@ -239,7 +238,7 @@ of any template rendering calls:
     from news.models import Entry
 
     def entry_list(request):
-        # TODO add pagination here
+        # Pagination should probably be added here
         return 'news/entry_list.html', {'object_list': Entry.objects.all()}
 
     def entry_detail(request, slug):
@@ -247,7 +246,7 @@ of any template rendering calls:
 
 ``urls.py``::
 
-    from django.conf.urls.defaults import patterns, include, url
+    from django.conf.urls import patterns, include, url
 
     urlpatterns = patterns('news.views',
         url(r'^$', 'entry_list', name='entry_list'),
@@ -314,6 +313,17 @@ Storing the URL in a context variable is supported too::
 
     {% load applicationcontent_tags %}
     {% app_reverse "mymodel_detail" "myapp.urls" arg1 arg2 as url %}
+
+Inside the app (in this case, inside the views defined in ``myapp.urls``),
+you can also pass the current request instance instead of the URLconf
+name.
+
+If an application has been added several times to the same page tree,
+``app_reverse`` tries to find the best match. The logic is contained inside
+``ApplicationContent.closest_match``, and can be overridden by subclassing
+the application content type. The default implementation only takes the current
+language into account, which is mostly helpful when you're using the
+translations page extension.
 
 
 Additional customization possibilities
@@ -398,17 +408,18 @@ need them. All of these must be specified in the ``APPLICATIONS`` argument to
 Letting 3rd party apps define navigation entries
 ------------------------------------------------
 
-Short answer: You need the ``navigation`` extension module. Activate it like
-this::
+Short answer: You need the ``feincms.module.page.extensions.navigation``
+extension module. Activate it like this::
 
-    Page.register_extensions('navigation')
+    Page.register_extensions('feincms.module.page.extensions.navigation')
 
 
 Please note however, that this call needs to come after all
 ``NavigationExtension`` subclasses have been processed, because otherwise they
 will not be available for selection in the page administration! (Yes, this is
-lame and yes, this is going to change as soon as I find the time to whip up a
-better solution.)
+lame and yes, this is going to change as soon as we find a
+better solution. In the meantime, stick your subclass definition before
+the register_extensions call.)
 
 Because the use cases for extended navigations are so different, FeinCMS
 does not go to great lengths trying to cover them all. What it does though
@@ -446,4 +457,22 @@ You don't need to do anything else as long as you use the built-in
             for p in page.children.in_navigation():
                 yield p
 
-    Page.register_extensions('navigation')
+    Page.register_extensions('feincms.module.page.extensions.navigation')
+
+Note that the objects returned should at least try to mimic a real page so
+navigation template tags as ``siblings_along_path_to`` and friends continue
+to work, ie. at least the following attributes should exist:
+
+::
+
+    title     = '(whatever)'
+    url       = '(whatever)'
+
+    # Attributes that MPTT assumes to exist
+    parent_id = page.id
+    tree_id   = page.tree_id
+    level     = page.level+1
+    lft       = page.lft
+    rght      = page.rght
+
+

@@ -19,7 +19,8 @@ Now, you need to create your own model admin subclass inheriting from both
 FeinCMS' ``PageAdmin`` and from reversions ``VersionAdmin``::
 
     from django.contrib import admin
-    from feincms.module.page.models import Page, PageAdmin
+    from feincms.module.page.models import Page
+    from feincms.module.page.modeladmins import PageAdmin
     from reversion.admin import VersionAdmin
 
     admin.site.unregister(Page)
@@ -30,7 +31,7 @@ FeinCMS' ``PageAdmin`` and from reversions ``VersionAdmin``::
     admin.site.register(Page, VersionedPageAdmin)
 
 The ``VersionedPageAdmin`` does not look like the ItemEditor -- it's
-just raw Django inlines, without any additional javascript. Patches are
+just raw Django inlines, without any additional JavaScript. Patches are
 welcome, but the basic functionality needed for versioning page content
 is there.
 

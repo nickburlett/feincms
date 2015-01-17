@@ -7,9 +7,13 @@ which processes, modifies or adds subnavigation entries. The bundled
 be they real Page instances or extended navigation entries.
 """
 
+from __future__ import absolute_import, unicode_literals
+
 from django.db import models
+from django.utils import six
 from django.utils.translation import ugettext_lazy as _
 
+from feincms import extensions
 from feincms.utils import get_object
 from feincms._internal import monkeypatch_method
 
@@ -17,6 +21,8 @@ from feincms._internal import monkeypatch_method
 class TypeRegistryMetaClass(type):
     """
     You can access the list of subclasses as <BaseClass>.types
+
+    TODO use NavigationExtension.__subclasses__() instead?
     """
 
     def __init__(cls, name, bases, attrs):
@@ -33,8 +39,8 @@ class PagePretender(object):
     navigation tree.
 
     For use as fake navigation page, you should at least define the following
-    parameters on creation: title, url, level. If using the translation extension,
-    also add language.
+    parameters on creation: title, url, level. If using the translation
+    extension, also add language.
     """
     pk = None
 
@@ -56,6 +62,7 @@ class PagePretender(object):
         return self.level
 
     def get_children(self):
+        """ overwrite this if you want nested extensions using recursetree """
         return []
 
     def available_translations(self):
@@ -69,23 +76,23 @@ class PagePretender(object):
         return shorten_string(self.title)
 
 
-class NavigationExtension(object):
+class NavigationExtension(six.with_metaclass(TypeRegistryMetaClass)):
     """
     Base class for all navigation extensions.
 
     The name attribute is shown to the website administrator.
     """
 
-    __metaclass__ = TypeRegistryMetaClass
     name = _('navigation extension')
 
     def children(self, page, **kwargs):
         """
-        This is the method which must be overridden in every navigation extension.
+        This is the method which must be overridden in every navigation
+        extension.
 
-        It receives the page the extension is attached to, the depth up to which
-        the navigation should be resolved, and the current request object if it
-        is available.
+        It receives the page the extension is attached to, the depth up to
+        which the navigation should be resolved, and the current request object
+        if it is available.
         """
 
         raise NotImplementedError
@@ -93,26 +100,38 @@ class NavigationExtension(object):
 
 def navigation_extension_choices():
     for ext in NavigationExtension.types:
-        yield ('%s.%s' % (ext.__module__, ext.__name__), ext.name)
+        if (issubclass(ext, NavigationExtension)
+                and ext is not NavigationExtension):
+            yield ('%s.%s' % (ext.__module__, ext.__name__), ext.name)
 
 
-def register(cls, admin_cls):
-    cls.add_to_class('navigation_extension', models.CharField(_('navigation extension'),
-        choices=navigation_extension_choices(), blank=True, null=True, max_length=200,
-        help_text=_('Select the module providing subpages for this page if you need to customize the navigation.')))
+class Extension(extensions.Extension):
+    ident = 'navigation'  # TODO actually use this
 
-    @monkeypatch_method(cls)
-    def extended_navigation(self, **kwargs):
-        if not self.navigation_extension:
-            return self.children.in_navigation()
+    def handle_model(self):
+        self.model.add_to_class(
+            'navigation_extension',
+            models.CharField(
+                _('navigation extension'),
+                choices=navigation_extension_choices(),
+                blank=True, null=True, max_length=200,
+                help_text=_(
+                    'Select the module providing subpages for this page if'
+                    ' you need to customize the navigation.')))
 
-        cls = get_object(self.navigation_extension, fail_silently=True)
-        if not cls or not callable(cls):
-            return self.children.in_navigation()
+        @monkeypatch_method(self.model)
+        def extended_navigation(self, **kwargs):
+            if not self.navigation_extension:
+                return self.children.in_navigation()
 
-        return cls().children(self, **kwargs)
+            cls = get_object(self.navigation_extension, fail_silently=True)
+            if not cls or not callable(cls):
+                return self.children.in_navigation()
 
-    admin_cls.fieldsets.append((_('Navigation extension'), {
-        'fields': ('navigation_extension',),
-        'classes': ('collapse',),
-        }))
+            return cls().children(self, **kwargs)
+
+    def handle_modeladmin(self, modeladmin):
+        modeladmin.add_extension_options(_('Navigation extension'), {
+            'fields': ('navigation_extension',),
+            'classes': ('collapse',),
+        })

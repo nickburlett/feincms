@@ -1,35 +1,50 @@
 """
 Allows setting a date range for when the page is active. Modifies the active()
-manager method so that only pages inside the given range are used in the default
-views and the template tags.
+manager method so that only pages inside the given range are used in the
+default views and the template tags.
 
 Depends on the page class having a "active_filters" list that will be used by
 the page's manager to determine which entries are to be considered active.
 """
 # ------------------------------------------------------------------------
 
+from __future__ import absolute_import, unicode_literals
+
 from datetime import datetime
 
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.cache import patch_response_headers
 from django.utils.translation import ugettext_lazy as _
+
+from feincms import extensions
+
+try:
+    from pytz import InvalidTimeError
+except ImportError:
+    # Fall back to a catch-all
+    InvalidTimeError = Exception
+
 
 # ------------------------------------------------------------------------
 def format_date(d, if_none=''):
     """
-    Format a date in a nice human readable way: Omit the year if it's the current
-    year. Also return a default value if no date is passed in.
+    Format a date in a nice human readable way: Omit the year if it's the
+    current year. Also return a default value if no date is passed in.
     """
 
-    if d is None: return if_none
+    if d is None:
+        return if_none
 
     now = timezone.now()
     fmt = (d.year == now.year) and '%d.%m' or '%d.%m.%Y'
     return d.strftime(fmt)
 
+
 def latest_children(self):
     return self.get_children().order_by('-publication_date')
+
 
 # ------------------------------------------------------------------------
 def granular_now(n=None):
@@ -42,57 +57,92 @@ def granular_now(n=None):
     """
     if n is None:
         n = timezone.now()
-    return timezone.make_aware(datetime(n.year, n.month, n.day, n.hour,
-                                        (n.minute // 5) * 5), n.tzinfo)
+    # WARNING/TODO: make_aware can raise a pytz NonExistentTimeError or
+    # AmbiguousTimeError if the resultant time is invalid in n.tzinfo
+    # -- see https://github.com/feincms/feincms/commit/5d0363df
+    return timezone.make_aware(
+        datetime(n.year, n.month, n.day, n.hour, (n.minute // 5) * 5),
+        n.tzinfo)
+
 
 # ------------------------------------------------------------------------
-def register(cls, admin_cls):
-    cls.add_to_class('publication_date',
-                                models.DateTimeField(_('publication date'),
-        default=granular_now))
-    cls.add_to_class('publication_end_date',
-                                models.DateTimeField(_('publication end date'),
-        blank=True, null=True,
-        help_text=_('Leave empty if the entry should stay active forever.')))
-    cls.add_to_class('latest_children', latest_children)
+def datepublisher_response_processor(page, request, response):
+    """
+    This response processor is automatically added when the datepublisher
+    extension is registered. It sets the response headers to match with
+    the publication end date of the page so that upstream caches and
+    the django caching middleware know when to expunge the copy.
+    """
+    expires = page.publication_end_date
+    if expires is not None:
+        delta = expires - timezone.now()
+        delta = int(delta.days * 86400 + delta.seconds)
+        try:
+            patch_response_headers(response, delta)
+        except InvalidTimeError:  # NonExistentTimeError and AmbiguousTimeError
+            patch_response_headers(response, delta - 7200)
 
-    # Patch in rounding the pub and pub_end dates on save
-    orig_save = cls.save
 
-    def granular_save(obj, *args, **kwargs):
-        if obj.publication_date:
-            obj.publication_date = granular_now(obj.publication_date)
-        if obj.publication_end_date:
-            obj.publication_end_date = granular_now(obj.publication_end_date)
-        orig_save(obj, *args, **kwargs)
-    cls.save = granular_save
+# ------------------------------------------------------------------------
+class Extension(extensions.Extension):
+    def handle_model(self):
+        self.model.add_to_class(
+            'publication_date',
+            models.DateTimeField(_('publication date'), default=granular_now))
+        self.model.add_to_class(
+            'publication_end_date',
+            models.DateTimeField(
+                _('publication end date'),
+                blank=True, null=True,
+                help_text=_(
+                    'Leave empty if the entry should stay active forever.')))
+        self.model.add_to_class('latest_children', latest_children)
 
-    # Append publication date active check
-    if hasattr(cls._default_manager, 'add_to_active_filters'):
-        cls._default_manager.add_to_active_filters(
-            Q(publication_date__lte=granular_now) &
-             (Q(publication_end_date__isnull=True) |
-              Q(publication_end_date__gt=granular_now)),
-            key='datepublisher')
+        # Patch in rounding the pub and pub_end dates on save
+        orig_save = self.model.save
 
-    def datepublisher_admin(self, page):
-        return u'%s &ndash; %s' % (
-            format_date(page.publication_date),
-            format_date(page.publication_end_date, '&infin;'),
+        def granular_save(obj, *args, **kwargs):
+            if obj.publication_date:
+                obj.publication_date = granular_now(obj.publication_date)
+            if obj.publication_end_date:
+                obj.publication_end_date = granular_now(
+                    obj.publication_end_date)
+            orig_save(obj, *args, **kwargs)
+        self.model.save = granular_save
+
+        # Append publication date active check
+        if hasattr(self.model._default_manager, 'add_to_active_filters'):
+            self.model._default_manager.add_to_active_filters(
+                Q(publication_date__lte=granular_now) &
+                 (Q(publication_end_date__isnull=True) |
+                  Q(publication_end_date__gt=granular_now)),
+                key='datepublisher',
             )
-    datepublisher_admin.allow_tags = True
-    datepublisher_admin.short_description = _('visible from - to')
 
-    admin_cls.datepublisher_admin = datepublisher_admin
-    try:
-        pos = admin_cls.list_display.index('is_visible_admin')
-    except ValueError:
-        pos = len(admin_cls.list_display)
+        # Processor to patch up response headers for expiry date
+        self.model.register_response_processor(
+            datepublisher_response_processor)
 
-    admin_cls.list_display.insert(pos + 1, 'datepublisher_admin')
+    def handle_modeladmin(self, modeladmin):
+        def datepublisher_admin(self, obj):
+            return '%s &ndash; %s' % (
+                format_date(obj.publication_date),
+                format_date(obj.publication_end_date, '&infin;'),
+            )
+        datepublisher_admin.allow_tags = True
+        datepublisher_admin.short_description = _('visible from - to')
 
-    admin_cls.add_extension_options(_('Date-based publishing'), {
-                'fields': ('publication_date', 'publication_end_date'),
+        modeladmin.__class__.datepublisher_admin = datepublisher_admin
+
+        try:
+            pos = modeladmin.list_display.index('is_visible_admin')
+        except ValueError:
+            pos = len(modeladmin.list_display)
+
+        modeladmin.list_display.insert(pos + 1, 'datepublisher_admin')
+
+        modeladmin.add_extension_options(_('Date-based publishing'), {
+            'fields': ['publication_date', 'publication_end_date'],
         })
 
 # ------------------------------------------------------------------------

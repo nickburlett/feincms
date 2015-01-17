@@ -1,9 +1,11 @@
 """
-Simple contact form for FeinCMS. The default form class has name, email, subject
-and content fields, content being the only one which is not required. You can
-provide your own comment form by passing an additional ``form=YourClass``
-argument to the ``create_content_type`` call.
+Simple contact form for FeinCMS. The default form class has name, email,
+subject and content fields, content being the only one which is not required.
+You can provide your own comment form by passing an additional
+``form=YourClass`` argument to the ``create_content_type`` call.
 """
+
+from __future__ import absolute_import, unicode_literals
 
 from django import forms
 from django.core.mail import send_mail
@@ -19,7 +21,8 @@ class ContactForm(forms.Form):
     email = forms.EmailField(label=_('email'))
     subject = forms.CharField(label=_('subject'))
 
-    content = forms.CharField(widget=forms.Textarea, required=False,
+    content = forms.CharField(
+        widget=forms.Textarea, required=False,
         label=_('content'))
 
 
@@ -41,7 +44,8 @@ class ContactFormContent(models.Model):
 
     def process(self, request, **kwargs):
         if request.GET.get('_cf_thanks'):
-            self.rendered_output = render_to_string('content/contactform/thanks.html',
+            self.rendered_output = render_to_string(
+                'content/contactform/thanks.html',
                 context_instance=RequestContext(request))
             return
 
@@ -53,10 +57,11 @@ class ContactFormContent(models.Model):
                     form.cleaned_data['subject'],
                     render_to_string('content/contactform/email.txt', {
                         'data': form.cleaned_data,
-                        }),
+                    }),
                     form.cleaned_data['email'],
                     [self.email],
-                    fail_silently=True)
+                    fail_silently=True,
+                )
 
                 return HttpResponseRedirect('?_cf_thanks=1')
         else:
@@ -67,10 +72,12 @@ class ContactFormContent(models.Model):
 
             form = self.form(initial=initial)
 
-        self.rendered_output = render_to_string('content/contactform/form.html', {
-            'content': self,
-            'form': form,
-            }, context_instance=RequestContext(request))
+        self.rendered_output = render_to_string(
+            'content/contactform/form.html', {
+                'content': self,
+                'form': form,
+            },
+            context_instance=RequestContext(request))
 
     def render(self, **kwargs):
-        return getattr(self, 'rendered_output', u'')
+        return getattr(self, 'rendered_output', '')

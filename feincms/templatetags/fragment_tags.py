@@ -1,4 +1,7 @@
+from __future__ import absolute_import, unicode_literals
+
 from django import template
+
 
 register = template.Library()
 
@@ -18,16 +21,16 @@ class FragmentNode(template.Node):
         if not hasattr(request, '_feincms_fragments'):
             request._feincms_fragments = {}
 
-        old = request._feincms_fragments.get(identifier, u'')
+        old = request._feincms_fragments.get(identifier, '')
 
         if self.mode == 'prepend':
             request._feincms_fragments[identifier] = rendered + old
         elif self.mode == 'replace':
             request._feincms_fragments[identifier] = rendered
-        else: # append
+        else:  # append
             request._feincms_fragments[identifier] = old + rendered
 
-        return u''
+        return ''
 
 
 @register.tag
@@ -42,7 +45,9 @@ def fragment(parser, token):
 
     or::
 
-        {% fragment request "title" (prepend|replace|append) %} content ... {% endfragment %}
+        {% fragment request "title" (prepend|replace|append) %}
+        content ...
+        {% endfragment %}
     """
 
     nodelist = parser.parse(('endfragment'),)
@@ -64,11 +69,11 @@ class GetFragmentNode(template.Node):
         try:
             value = request._feincms_fragments[fragment]
         except (AttributeError, KeyError):
-            value = u''
+            value = ''
 
         if self.as_var:
             context[self.as_var] = value
-            return u''
+            return ''
         return value
 
 
@@ -92,7 +97,8 @@ def get_fragment(parser, token):
         return GetFragmentNode(fragments[1], fragments[2])
     elif len(fragments) == 5 and fragments[3] == 'as':
         return GetFragmentNode(fragments[1], fragments[2], fragments[4])
-    raise template.TemplateSyntaxError, 'Invalid syntax for get_fragment: %s' % token.contents
+    raise template.TemplateSyntaxError(
+        'Invalid syntax for get_fragment: %s' % token.contents)
 
 
 @register.filter

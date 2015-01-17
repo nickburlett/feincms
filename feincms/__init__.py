@@ -1,4 +1,6 @@
-VERSION = (1, 6, 3)
+from __future__ import absolute_import, unicode_literals
+
+VERSION = (1, 10, 1)
 __version__ = '.'.join(map(str, VERSION))
 
 
@@ -11,8 +13,9 @@ class LazySettings(object):
             if not key.startswith('FEINCMS_'):
                 continue
 
-            setattr(self, key, getattr(django_settings, key,
-                getattr(default_settings, key)))
+            value = getattr(default_settings, key)
+            value = getattr(django_settings, key, value)
+            setattr(self, key, value)
 
     def __getattr__(self, attr):
         self._load_settings()
@@ -23,7 +26,9 @@ settings = LazySettings()
 
 
 COMPLETELY_LOADED = False
-def ensure_completely_loaded():
+
+
+def ensure_completely_loaded(force=False):
     """
     This method ensures all models are completely loaded
 
@@ -36,8 +41,17 @@ def ensure_completely_loaded():
     """
 
     global COMPLETELY_LOADED
-    if COMPLETELY_LOADED:
+    if COMPLETELY_LOADED and not force:
         return True
+
+    try:
+        from django.apps import apps
+    except ImportError:
+        pass
+    else:
+        # Django 1.7 and up
+        if not apps.ready:
+            return
 
     # Ensure meta information concerning related fields is up-to-date.
     # Upon accessing the related fields information from Model._meta,
@@ -50,7 +64,8 @@ def ensure_completely_loaded():
     # don't miss out.
     from django.db.models import loading
     for model in loading.get_models():
-        for cache_name in ('_field_cache', '_field_name_cache', '_m2m_cache',
+        for cache_name in (
+                '_field_cache', '_field_name_cache', '_m2m_cache',
                 '_related_objects_cache', '_related_many_to_many_cache',
                 '_name_map'):
             try:
@@ -58,5 +73,29 @@ def ensure_completely_loaded():
             except AttributeError:
                 pass
 
-    COMPLETELY_LOADED = True
+        # Randomly call some cache filling methods
+        # http://goo.gl/XNI2qz
+        model._meta._fill_fields_cache()
+
+    # Calls to get_models(...) are cached by the arguments used in the call.
+    # This cache is normally cleared in loading.register_models(), but we
+    # invalidate the get_models() cache, by calling get_models
+    # above before all apps have loaded. (Django's load_app() doesn't clear the
+    # get_models cache as it perhaps should). So instead we clear the
+    # get_models cache again here. If we don't do this, Django 1.5 chokes on
+    # a model validation error (Django 1.4 doesn't exhibit this problem).
+    # See Issue #323 on github.
+    if hasattr(loading, 'cache'):
+        try:
+            loading.cache.get_models.cache_clear()  # Django 1.7+
+        except AttributeError:
+            loading.cache._get_models_cache.clear()  # Django 1.6-
+
+    if hasattr(loading.app_cache_ready, '__call__'):
+        if loading.app_cache_ready():
+            COMPLETELY_LOADED = True
+    else:
+        # TODO Django 1.7 offers us better ways of handling this, maybe.
+        if loading.app_cache_ready:
+            COMPLETELY_LOADED = True
     return True

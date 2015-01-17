@@ -1,4 +1,5 @@
-from django import forms
+from __future__ import absolute_import, unicode_literals
+
 from django.conf import settings as django_settings
 from django.contrib import admin
 from django.core.exceptions import ImproperlyConfigured
@@ -33,7 +34,8 @@ class SectionContent(models.Model):
 
     title = models.CharField(_('title'), max_length=200, blank=True)
     richtext = RichTextField(_('text'), blank=True)
-    mediafile = MediaFileForeignKey(MediaFile, verbose_name=_('media file'),
+    mediafile = MediaFileForeignKey(
+        MediaFile, verbose_name=_('media file'),
         related_name='+', blank=True, null=True)
 
     class Meta:
@@ -42,40 +44,31 @@ class SectionContent(models.Model):
         verbose_name_plural = _('sections')
 
     @classmethod
-    def initialize_type(cls, TYPE_CHOICES=None, cleanse=False):
+    def initialize_type(cls, TYPE_CHOICES=None, cleanse=None):
         if 'feincms.module.medialibrary' not in django_settings.INSTALLED_APPS:
-            raise ImproperlyConfigured, 'You have to add \'feincms.module.medialibrary\' to your INSTALLED_APPS before creating a %s' % cls.__name__
+            raise ImproperlyConfigured(
+                'You have to add \'feincms.module.medialibrary\' to your'
+                ' INSTALLED_APPS before creating a %s' % cls.__name__)
 
         if TYPE_CHOICES is None:
-            raise ImproperlyConfigured, 'You need to set TYPE_CHOICES when creating a %s' % cls.__name__
+            raise ImproperlyConfigured(
+                'You need to set TYPE_CHOICES when creating a'
+                ' %s' % cls.__name__)
 
-        cls.add_to_class('type', models.CharField(_('type'),
+        cls.add_to_class('type', models.CharField(
+            _('type'),
             max_length=10, choices=TYPE_CHOICES,
-            default=TYPE_CHOICES[0][0]))
+            default=TYPE_CHOICES[0][0]
+        ))
 
         if cleanse:
-            # If cleanse is True use default cleanse method
-            if cleanse == True:
-                import warnings
-                warnings.warn("Please pass a callable instead. cleanse=True is"
-                    " being deprecated in favor of explicitly specifying the"
-                    " cleansing function. To continue using the same"
-                    " functionality, pip install feincms-cleanse and pass"
-                    " cleanse=feincms_cleanse.cleanse_html to the"
-                    " create_content_type call."
-                    " Support for cleanse=True will be removed in FeinCMS v1.8.",
-                    DeprecationWarning, stacklevel=2)
-
-                from feincms.utils.html.cleanse import cleanse_html
-                cls.cleanse = cleanse_html
-            # Otherwise use passed callable
-            else:
-                cls.cleanse = cleanse
+            cls.cleanse = cleanse
 
     @classmethod
     def get_queryset(cls, filter_args):
         # Explicitly add nullable FK mediafile to minimize the DB query count
-        return cls.objects.select_related('parent', 'mediafile').filter(filter_args)
+        return cls.objects.select_related('parent', 'mediafile').filter(
+            filter_args)
 
     def render(self, **kwargs):
         if self.mediafile:
@@ -83,15 +76,18 @@ class SectionContent(models.Model):
         else:
             mediafile_type = 'nomedia'
 
-        return render_to_string([
-            'content/section/%s_%s.html' % (self.type, mediafile_type),
-            'content/section/%s.html' % self.type,
-            'content/section/%s.html' % mediafile_type,
-            'content/section/default.html',
-            ], {'content': self})
+        return render_to_string(
+            [
+                'content/section/%s_%s.html' % (mediafile_type, self.type),
+                'content/section/%s.html' % mediafile_type,
+                'content/section/%s.html' % self.type,
+                'content/section/default.html',
+            ],
+            {'content': self},
+        )
 
     def save(self, *args, **kwargs):
-        if getattr(self, 'cleanse', False):
+        if getattr(self, 'cleanse', None):
             try:
                 # Passes the rich text content as first argument because
                 # the passed callable has been converted into a bound method

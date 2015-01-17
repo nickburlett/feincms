@@ -1,14 +1,3 @@
-if(!Array.indexOf) {
-    Array.prototype.indexOf = function(obj) {
-        for(var i=0; i<this.length; i++) {
-            if(this[i]==obj) {
-                return i;
-            }
-        }
-        return -1;
-    };
-}
-
 (function($){
     // Patch up urlify maps to generate nicer slugs in german
     if(typeof(Downcoder) != "undefined"){
@@ -30,10 +19,16 @@ if(!Array.indexOf) {
     }
 
     function create_new_item_from_form(form, modname, modvar){
-        var fieldset = $("<fieldset>").addClass("module aligned order-item item-wrapper-" + modvar);
 
-        var wrp = [];
-        wrp.push('<h2><img class="item-delete" src="'+IMG_DELETELINK_PATH+'" /><span class="handle"></span> <span class="modname">'+modname+'</span> &nbsp;(<span class="collapse">'+feincms_gettext('Hide')+'</span>)</h2>');
+        var fieldset = $("<fieldset>").addClass("module aligned order-item item-wrapper-" + modvar);
+        var original_id_id = '#id_' + form.attr('id') + '-id';
+
+        var wrp = ['<h2>'];
+        // If original has delete checkbox or this is a freshly added CT? Add delete link!
+        if($('.delete', form).length || !$(original_id_id, form).val()) {
+            wrp.push('<img class="item-delete" src="'+IMG_DELETELINK_PATH+'" />');
+        }
+        wrp.push('<span class="handle"></span> <span class="modname">'+modname+'</span> &nbsp;(<span class="collapse">'+feincms_gettext('Hide')+'</span>)</h2>');
         wrp.push('<div class="item-content"></div>');
         fieldset.append(wrp.join(""));
 
@@ -105,17 +100,17 @@ if(!Array.indexOf) {
         var mouseenter_timeout;
         var mouseleave_timeout;
         function hide_controls() {
-            item_controls.find("*").fadeOut(800);
+            item_controls.find("*").fadeOut(400);
             is_hidden = true;
         }
         function show_controls() {
-            item_controls.find("*").fadeIn(800);
+            item_controls.find("*").fadeIn(200);
             is_hidden = false;
         }
         item_controls.unbind('mouseleave'); // Unbind in case it's already been bound.
         item_controls.mouseleave(function() {
             clearTimeout(mouseenter_timeout);
-            mouseleave_timeout = setTimeout(hide_controls, 1000);
+            mouseleave_timeout = setTimeout(hide_controls, 200);
         });
         item_controls.unbind('mouseenter'); // Unbind in case it's already been bound.
         item_controls.mouseenter(function() {
@@ -182,13 +177,12 @@ if(!Array.indexOf) {
         for(var i = 0; i < 2; i++){
             // Use Django's built-in inline spawing mechanism (Django 1.2+)
             // must use django.jQuery since the bound function lives there:
-            var returned = django.jQuery('#'+modvar+'_set-group').find(
+            django.jQuery('#'+modvar+'_set-group').find(
                 'div.add-row > a').triggerHandler('click');
-            if(returned==false) break; // correct return value
-        }
-        var new_form_count = parseInt($('#id_'+modvar+'_set-TOTAL_FORMS').val(), 10);
-        if(new_form_count > old_form_count){
-            return $('#'+modvar+'_set-'+(new_form_count-1));
+            var new_form_count = parseInt($('#id_'+modvar+'_set-TOTAL_FORMS').val(), 10);
+            if(new_form_count > old_form_count){
+                return $('#'+modvar+'_set-'+(new_form_count-1));
+            }
         }
     }
 
@@ -201,6 +195,8 @@ if(!Array.indexOf) {
             var old_region_id = REGION_MAP.indexOf(item.find("."+field).val());
             item.find("."+field).val(REGION_MAP[value]);
 
+            // show/hide the empty machine message in the source and
+            // target region.
             old_region_item = $("#"+REGION_MAP[old_region_id]+"_body");
             if (old_region_item.children("div.order-machine").children().length == 0)
                 old_region_item.children("div.empty-machine-msg").show();
@@ -332,25 +328,77 @@ if(!Array.indexOf) {
         });
     }
 
+    function create_tabbed(_tab_selector, _main_selector, _switch_cb) {
+        var tab_selector = _tab_selector,
+            main_selector = _main_selector,
+            switch_cb = _switch_cb;
+
+        $(tab_selector).addClass('clearfix');
+
+        $(tab_selector + " > .navi_tab").on('click', function() {
+            var elem = $(this),
+                tab_str = elem.attr("id").substr(0, elem.attr("id").length-4);
+
+            if (elem.hasClass('tab_active') && tab_str.indexOf('extension_option') != -1) {
+                elem.removeClass('tab_active');
+                $('#' + tab_str + '_body').hide();
+            } else {
+
+                $(tab_selector + " > .navi_tab").removeClass("tab_active");
+                elem.addClass("tab_active");
+                $(main_selector + " > div:visible, " + main_selector + " > fieldset:visible").hide();
+
+                $('#'+tab_str+'_body').show();
+
+                if(switch_cb) {
+                    switch_cb(tab_str);
+                }
+            }
+        });
+    }
+
     // global variable holding the current template key
     var current_template;
 
     $(document).ready(function($){
         hide_form_rows_with_hidden_widgets();
 
-        $("#main_wrapper > .navi_tab").click(function(){
-            var elem = $(this);
-            $("#main_wrapper > .navi_tab").removeClass("tab_active");
-            elem.addClass("tab_active");
-            $("#main > div:visible, #main > fieldset:visible").hide();
-
-            var tab_str = elem.attr("id").substr(0, elem.attr("id").length-4);
-            $('#'+tab_str+'_body').show();
+        create_tabbed('#main_wrapper', '#main', function(tab_str){
             ACTIVE_REGION = REGION_MAP.indexOf(tab_str);
-
             // make it possible to open current tab on page reload
             window.location.replace('#tab_'+tab_str);
         });
+
+        /* Rearrange the options fieldsets so we can wrap them into a tab bar */
+        var options_fieldsets = $('fieldset.collapse');
+        options_fieldsets.wrapAll('<div id="extension_options_wrapper" />');
+        var option_wrapper = $('#extension_options_wrapper');
+        var panels = [];
+
+        options_fieldsets.each(function(idx, elem) {
+            var option_title = $('h2', $(elem)).text();
+            var c = $(elem).children('div');
+            var id_base = 'extension_option_'+ idx;
+
+            $(elem).remove();
+
+            var paren = option_title.indexOf(' (');
+            if(paren > 0)
+                option_title = option_title.substr(0, paren);
+
+            option_wrapper.append('<div class="navi_tab" id="'+ id_base +'_tab">' +
+                                   option_title +
+                                   '</div>');
+            var panel = $('<fieldset class="module aligned" style="clear: both; display: none" id="' + id_base + '_body"></fieldset>');
+            panel.html(c);
+            panels.push(panel);
+        });
+
+        option_wrapper.append('<div id="extension_options" />');
+        $('#extension_options').html(panels);
+
+        create_tabbed('#extension_options_wrapper', '#extension_options');
+        /* Done morphing extension options into tabs */
 
         // save content type selects for later use
         save_content_type_selects();
@@ -369,42 +417,41 @@ if(!Array.indexOf) {
             update_item_controls(new_fieldset, ACTIVE_REGION);
         });
 
-        $("h2 img.item-delete").live('click', function(){
-            var popup_bg = '<div class="popup_bg"></div>';
-            $("body").append(popup_bg);
+        $(document.body).on('click', 'h2 img.item-delete', function() {
             var item = $(this).parents(".order-item");
-            jConfirm(DELETE_MESSAGES[0], DELETE_MESSAGES[1], function(r) {
-                if (r==true) {
-                    var in_database = item.find(".delete-field").length;
-                    if(in_database==0){ // remove on client-side only
-                        // decrement TOTAL_FORMS:
-                        var id = item.find(".item-content > div").attr('id');
-                        var modvar = id.replace(/_set-\d+$/, '');
-                        var count = $('#id_'+modvar+'_set-TOTAL_FORMS').val();
-                        // remove form:
-                        item.find(".item-content").remove();
+            if (confirm(DELETE_MESSAGES[0])) {
+                var in_database = item.find(".delete-field").length;
+                if(in_database==0){ // remove on client-side only
+                    var id = item.find(".item-content > div").attr('id');
 
-                        // could trigger django's deletion handler, which would
-                        // handle reindexing other inlines, etc, but seems to
-                        // cause errors, and is apparently unnecessary...
-                        // django.jQuery('#'+id).find('a.inline-deletelink')
-                        //   .triggerHandler('click');
-                    }
-                    else{ // saved on server, don't remove form
-                        set_item_field_value(item,"delete-field","checked");
-                    }
-                    item.fadeOut(200, function() {
-                      var region_item = $("#"+REGION_MAP[ACTIVE_REGION]+"_body");
-                      if (region_item.children("div.order-machine").children(":visible").length == 0) {
-                          region_item.children("div.empty-machine-msg").show();
-                      }
-                    });
+                    // poorify all contents
+                    items = item.parents('.order-machine').find('.order-item');
+                    items.each(function() {
+                      poorify_rich($(this));
+                    })
+
+                    // remove content
+                    django.jQuery('#'+id).find('a.inline-deletelink')
+                      .triggerHandler('click');
+
+                    // richify all contents again
+                    items.each(function() {
+                      richify_poor($(this));
+                    })
                 }
-                $(".popup_bg").remove();
-            });
+                else{ // saved on server, don't remove form
+                    set_item_field_value(item,"delete-field","checked");
+                }
+                item.fadeOut(200, function() {
+                  var region_item = $("#"+REGION_MAP[ACTIVE_REGION]+"_body");
+                  if (region_item.children("div.order-machine").children(":visible").length == 0) {
+                      region_item.children("div.empty-machine-msg").show();
+                  }
+                });
+            }
         });
 
-        $('h2 span.collapse').live('click', function(){
+        $(document.body).on('click', 'h2 span.collapse', function() {
             var node = this;
             $(this.parentNode.parentNode).children('.item-content').slideToggle(function(){
                 $(node).text(feincms_gettext($(this).is(':visible') ? 'Hide' : 'Show'));
@@ -417,6 +464,7 @@ if(!Array.indexOf) {
         function on_template_key_changed(){
             var input_element = this;
             var new_template = this.value;
+            var form_element = $(input_element).parents('form');
 
             if(current_template==new_template)
                 // Selected template did not change
@@ -430,9 +478,6 @@ if(!Array.indexOf) {
                 if(new_regions.indexOf(current_regions[i])==-1)
                     not_in_new.push(current_regions[i]);
 
-            var popup_bg = '<div id="popup_bg"></div>';
-            $("body").append(popup_bg);
-
             var msg = CHANGE_TEMPLATE_MESSAGES[1];
 
             if(not_in_new.length) {
@@ -442,24 +487,26 @@ if(!Array.indexOf) {
                 }, true);
             }
 
-            jConfirm(msg, CHANGE_TEMPLATE_MESSAGES[0], function(ret) {
-                if(ret) {
-                    for(var i=0; i<not_in_new.length; i++) {
-                        var items = $('#'+not_in_new[i]+'_body div.order-machine').children();
-                        // FIXME: this moves all soon-to-be-homeless items
-                        // to the first region, but that region is quite likely
-                        // not in the new template.
-                        move_item(0, items);
-                    }
+            if (confirm(msg)) {
+                for(var i=0; i<not_in_new.length; i++) {
+                    var body = $('#' + not_in_new[i] + '_body'),
+                        machine = body.find('.order-machine'),
+                        inputs = machine.find('input[name$=region]');
 
-                    input_element.checked = true;
-
-                    $('form').append('<input type="hidden" name="_continue" value="1" />').submit();
-                } else {
-                    $("div#popup_bg").remove();
-                    $(input_element).val($(input_element).data('original_value')); // Restore original value
+                    inputs.val(new_regions[0]);
                 }
-            });
+
+                input_element.checked = true;
+
+                form_element.append('<input type="hidden" name="_continue" value="1" />');
+                /* Simulate a click on the save button instead of form.submit(), so
+                   that the submit handlers from FilteredSelectMultiple get
+                   invoked. See Issue #372 */
+                form_element.find('input[type=submit][name=_save]').click();
+            } else {
+                // Restore original value
+                form_element.val($(input_element).data('original_value'));
+            }
 
             return false;
         }
@@ -498,7 +545,7 @@ if(!Array.indexOf) {
                     elem.find(".region-choice-field").val());
                 if (REGION_MAP[region_id] != undefined) {
                     var content_type = elem.attr("id").substr(
-                        0, elem.attr("id").indexOf("_"));
+                        0, elem.attr("id").lastIndexOf("_"));
                     var item = create_new_item_from_form(
                         elem, CONTENT_NAMES[content_type], content_type);
                     add_fieldset(region_id, item, {where:'append'});
@@ -510,7 +557,7 @@ if(!Array.indexOf) {
         $(".order-machine").sortable({
             handle: '.handle',
             helper: function(event, ui){
-                var h2 = $("<h2>").html($(ui.item).find('span.modname').html());
+                var h2 = $("<h2>").html($(ui).find('span.modname').html());
                 return $("<fieldset>").addClass("helper module").append(h2);
             },
             placeholder: 'highlight',
@@ -564,7 +611,7 @@ if(!Array.indexOf) {
         }
     });
 
-    $(window).load(function(){init_contentblocks();});
+    $(window).load(init_contentblocks);
 
     // externally accessible helpers
     window.ItemEditor = {

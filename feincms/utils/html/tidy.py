@@ -1,9 +1,22 @@
 # encoding: utf-8
 
+from __future__ import absolute_import, unicode_literals
+
 import re
 import tidylib
 
-# Based on http://stackoverflow.com/questions/92438/stripping-non-printable-characters-from-a-string-in-python
+from django.utils import six
+
+
+try:
+    # Python 2
+    unichr
+except NameError:
+    # Python 3
+    unichr = chr
+
+
+# Based on http://stackoverflow.com/questions/92438/
 #
 # We omit chars 9-13 (tab, newline, vertical tab, form feed, return) and 32
 # (space) to avoid clogging our reports with warnings about common,
@@ -24,9 +37,10 @@ def tidy_html(html):
     Input must be unicode.
     Output will be valid XHTML.
     """
-    if not isinstance(html, unicode):
+    if not isinstance(html, six.text_type):
         raise ValueError("tidyhtml must be called with a Unicode string!")
 
+    errors = list()
     warnings = list()
 
     # First, deal with embedded control codes:
@@ -46,31 +60,27 @@ def tidy_html(html):
         tidy_f = tidylib.tidy_fragment
         doc_mode = False
 
-    html, messages = tidy_f(
-        html.strip(),
-        {
-            "char-encoding":               "utf8",
-            "clean":                        False,
-            "drop-empty-paras":             False,
-            "drop-font-tags":               True,
-            "drop-proprietary-attributes":  False,
-            "fix-backslash":                True,
-            "indent":                       True,
-            "output-xhtml":                 True,
-        }
+    html, messages = tidy_f(html.strip(), {
+        "char-encoding": "utf8",
+        "clean": False,
+        "drop-empty-paras": False,
+        "drop-font-tags": True,
+        "drop-proprietary-attributes": False,
+        "fix-backslash": True,
+        "indent": True,
+        "output-xhtml": True,
+    }
     )
 
     messages = filter(None, (l.strip() for l in messages.split("\n") if l))
 
     # postprocess warnings to avoid HTML fragments being reported as lacking
     # doctype and title:
-    errors = list()
-    warnings = list()
-
     for msg in messages:
         if not doc_mode and "Warning: missing <!DOCTYPE> declaration" in msg:
             continue
-        if not doc_mode and "Warning: inserting missing 'title' element" in msg:
+        if (not doc_mode
+                and "Warning: inserting missing 'title' element" in msg):
             continue
         if not doc_mode and "Warning: inserting implicit <body>" in msg:
             continue

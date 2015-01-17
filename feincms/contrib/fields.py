@@ -1,35 +1,42 @@
-try:
-    import json
-except ImportError:
-    from django.utils import simplejson as json  # Python 2.5
+from __future__ import absolute_import, unicode_literals
+
+import json
 import logging
 
 from django import forms
 from django.db import models
 from django.core.serializers.json import DjangoJSONEncoder
+from django.utils import six
 
 
 class JSONFormField(forms.fields.CharField):
     def clean(self, value, *args, **kwargs):
+        # It seems that sometimes we receive dict objects here, not only
+        # strings. Partial form validation maybe?
         if value:
+            if isinstance(value, six.string_types):
+                try:
+                    value = json.loads(value)
+                except ValueError:
+                    raise forms.ValidationError("Invalid JSON data!")
+
             try:
-                # Run the value through JSON so we can normalize formatting and at least learn about malformed data:
-                value = json.dumps(json.loads(value), cls=DjangoJSONEncoder)
+                # Run the value through JSON so we can normalize formatting
+                # and at least learn about malformed data:
+                value = json.dumps(value, cls=DjangoJSONEncoder)
             except ValueError:
                 raise forms.ValidationError("Invalid JSON data!")
 
         return super(JSONFormField, self).clean(value, *args, **kwargs)
 
-class JSONField(models.TextField):
+
+class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
     """
     TextField which transparently serializes/unserializes JSON objects
 
     See:
     http://www.djangosnippets.org/snippets/1478/
     """
-
-    # Used so to_python() is called
-    __metaclass__ = models.SubfieldBase
 
     formfield = JSONFormField
 
@@ -38,7 +45,8 @@ class JSONField(models.TextField):
 
         if isinstance(value, dict):
             return value
-        elif isinstance(value, basestring):
+        elif (isinstance(value, six.string_types)
+                or isinstance(value, six.binary_type)):
             # Avoid asking the JSON decoder to handle empty values:
             if not value:
                 return {}
@@ -46,7 +54,8 @@ class JSONField(models.TextField):
             try:
                 return json.loads(value)
             except ValueError:
-                logging.getLogger("feincms.contrib.fields").exception("Unable to deserialize store JSONField data: %s", value)
+                logging.getLogger("feincms.contrib.fields").exception(
+                    "Unable to deserialize store JSONField data: %s", value)
                 return {}
         else:
             assert value is None
@@ -57,7 +66,8 @@ class JSONField(models.TextField):
         return self._flatten_value(value)
 
     def value_to_string(self, obj):
-        """Extract our value from the passed object and return it in string form"""
+        """Extract our value from the passed object and return it in string
+        form"""
 
         if hasattr(obj, self.attname):
             value = getattr(obj, self.attname)
@@ -75,15 +85,18 @@ class JSONField(models.TextField):
         if isinstance(value, dict):
             value = json.dumps(value, cls=DjangoJSONEncoder)
 
-        assert isinstance(value, basestring)
+        assert isinstance(value, six.string_types)
 
         return value
+
 
 try:
     from south.modelsinspector import add_introspection_rules
 
-    JSONField_introspection_rule = ( (JSONField,), [], {}, )
+    JSONField_introspection_rule = ((JSONField,), [], {},)
 
-    add_introspection_rules(rules=[JSONField_introspection_rule], patterns=["^feincms\.contrib\.fields"])
+    add_introspection_rules(
+        rules=[JSONField_introspection_rule],
+        patterns=["^feincms\.contrib\.fields"])
 except ImportError:
     pass

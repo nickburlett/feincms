@@ -72,6 +72,7 @@ All page module-specific template tags are contained in ``feincms_page_tags``::
 
    level: 1 = toplevel, 2 = sublevel, 3 = sub-sublevel
    depth: 1 = only one level, 2 = subpages too
+   group: Only used with the ``navigationgroups`` extension
 
    If you set depth to something else than 1, you might want to look into
    the ``tree_info`` template tag from the mptt_tags library.
@@ -85,19 +86,25 @@ All page module-specific template tags are contained in ``feincms_page_tags``::
            <a href="{{ p.get_absolute_url }}">{{ p.title }}</a>
        {% endfor %}
 
-    This template tag has replaced ``feincms_navigation``, which used
-    a hand-grown parser and had several bugs which were hard to fix without
-    a complete rewrite.
+   Example for outputting only the footer navigation when using the
+   default configuration of the ``navigationgroups`` page extension::
+
+       {% load feincms_page_tags %}
+
+       {% feincms_nav feincms_page level=2 depth=1 group='footer' as meta %}
+       {% for p in sublevel %}
+           <a href="{{ p.get_absolute_url }}">{{ p.title }}</a>
+       {% endfor %}
 
 .. function:: siblings_along_path_to:
 
-   This is a filter designed to work in close conjuction with the
-   ``feincms_navigation`` template tag describe above to build a
+   This is a filter designed to work in close conjunction with the
+   ``feincms_nav`` template tag describe above to build a
    navigation tree following the path to the current page.
 
    Example::
 
-        {% feincms_navigation of feincms_page as navitems level=1,depth=3 %}
+        {% feincms_nav feincms_page level=1 depth=3 as navitems %}
         {% with navitems|siblings_along_path_to:feincms_page as navtree %}
             {% recursetree navtree %}
                 * {{ node.short_title }} <br>
@@ -197,11 +204,36 @@ All page module-specific template tags are contained in ``feincms_page_tags``::
 
        {% load feincms_page_tags %}
 
-       {% feincms_navigation of feincms_page as main level=1 %}
+       {% feincms_nav feincms_page level=1 as main %}
        {% for entry in main %}
            <a {% if entry|is_equal_or_parent_of:feincms_page %}class="mark"{% endif %}
                href="{{ entry.get_absolute_url }}">{{ entry.title }}</a>
        {% endfor %}
+
+.. function:: page_is_active:
+
+   The advantage of ``page_is_active`` compared to the previous tags is that
+   it also nows how to handle page pretenders. If ``entry`` is a page
+   pretender, the template tag returns ``True`` if the current path starts
+   with the page pretender's path. If ``entry`` is a regular page, the logic
+   is the same as in ``is_equal_or_parent_of``.
+
+   ::
+
+       {% load feincms_page_tags %}
+       {% feincms_nav feincms_page level=1 as main %}
+       {% for entry in main %}
+           {% page_is_active entry as is_active %}
+           <a {% if is_active %}class="mark"{% endif %}
+               href="{{ entry.get_absolute_url }}">{{ entry.title }}</a>
+       {% endfor %}
+
+   The values of ``feincms_page`` (the current page) and the current path
+   are pulled out of the context variables ``feincms_page`` and ``request``.
+   They can also be overriden if you so require::
+
+       {% page_is_active entry feincms_page=something path=request.path %}
+
 
 Application content template tags
 =================================

@@ -2,10 +2,12 @@
 # coding=utf-8
 # ------------------------------------------------------------------------
 #
-#  Created by Martin J. Laubach on 2011-08-01 
+#  Created by Martin J. Laubach on 2011-08-01
 #  Copyright (c) 2011 Martin J. Laubach. All rights reserved.
 #
 # ------------------------------------------------------------------------
+
+from __future__ import absolute_import, unicode_literals
 
 from django.dispatch import Signal
 

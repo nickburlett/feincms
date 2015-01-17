@@ -2,10 +2,14 @@
 # coding=utf-8
 # ------------------------------------------------------------------------
 
+from __future__ import absolute_import, unicode_literals
+
 from django.db.models import Max
+from django.db.models import get_model
 from django.contrib.sitemaps import Sitemap
 
-from feincms.module.page.models import Page
+from feincms import settings
+
 
 # ------------------------------------------------------------------------
 class PageSitemap(Sitemap):
@@ -13,7 +17,10 @@ class PageSitemap(Sitemap):
     The PageSitemap can be used to automatically generate sitemap.xml files
     for submission to index engines. See http://www.sitemaps.org/ for details.
     """
-    def __init__(self, navigation_only=False, max_depth=0, changefreq=None, queryset=None, filter=None, extended_navigation=False, *args, **kwargs):
+    def __init__(self, navigation_only=False, max_depth=0, changefreq=None,
+                 queryset=None, filter=None, extended_navigation=False,
+                 page_model=settings.FEINCMS_DEFAULT_PAGE_MODEL,
+                 *args, **kwargs):
         """
         The PageSitemap accepts the following parameters for customisation
         of the resulting sitemap.xml output:
@@ -33,15 +40,16 @@ class PageSitemap(Sitemap):
         level, in_navigation and optionally modification_date.
         """
         super(PageSitemap, self).__init__(*args, **kwargs)
-        self.depth_cutoff        = max_depth
-        self.navigation_only     = navigation_only
-        self.changefreq          = changefreq
-        self.filter              = filter
+        self.depth_cutoff = max_depth
+        self.navigation_only = navigation_only
+        self.changefreq = changefreq
+        self.filter = filter
         self.extended_navigation = extended_navigation
         if queryset is not None:
-            self.queryset        = queryset
+            self.queryset = queryset
         else:
-            self.queryset        = Page.objects.active()
+            Page = get_model(*page_model.split('.'))
+            self.queryset = Page.objects.active()
 
     def items(self):
         """
@@ -52,7 +60,7 @@ class PageSitemap(Sitemap):
         if callable(base_qs):
             base_qs = base_qs()
 
-        self.max_depth = base_qs.aggregate(Max('level'))['level__max']
+        self.max_depth = base_qs.aggregate(Max('level'))['level__max'] or 0
         if self.depth_cutoff > 0:
             self.max_depth = min(self.depth_cutoff, self.max_depth)
 
@@ -62,9 +70,9 @@ class PageSitemap(Sitemap):
         if self.navigation_only:
             qs = qs.filter(in_navigation=True)
         if self.depth_cutoff > 0:
-            qs = qs.filter(level__lte=self.max_depth-1)
+            qs = qs.filter(level__lte=self.max_depth - 1)
 
-        pages = [ p for p in qs if p.is_active() ]
+        pages = [p for p in qs if p.is_active()]
 
         if self.extended_navigation:
             for idx, page in enumerate(pages):
@@ -73,8 +81,12 @@ class PageSitemap(Sitemap):
                 if getattr(page, 'navigation_extension', None):
                     cnt = 0
                     for p in page.extended_navigation():
-                        depth_too_deep = self.depth_cutoff > 0 and p.level > self.depth_cutoff
-                        not_in_nav = self.navigation_only and not p.in_navigation
+                        depth_too_deep = (
+                            self.depth_cutoff > 0
+                            and p.level > self.depth_cutoff)
+                        not_in_nav = (
+                            self.navigation_only
+                            and not p.in_navigation)
                         if depth_too_deep or not_in_nav:
                             continue
                         cnt += 1
@@ -107,15 +119,5 @@ class PageSitemap(Sitemap):
             prio += 1.2 * self.per_level
 
         return "%0.2g" % min(1.0, prio)
-
-    # After a call to the sitemap, be sure to erase the cached _paginator
-    # attribute, so next time we'll re-fetch the items list instead of using
-    # a stale list.
-    # This has been fixed in Django r17468
-    def get_urls(self, *args, **kwargs):
-        urls = super(PageSitemap, self).get_urls(*args, **kwargs)
-        if hasattr(self, '_paginator'):
-            del(self._paginator)
-        return urls
 
 # ------------------------------------------------------------------------
