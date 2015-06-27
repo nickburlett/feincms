@@ -34,9 +34,9 @@ from feincms.content.richtext.models import RichTextContent
 from feincms.context_processors import add_page_if_missing
 from feincms.models import ContentProxy
 from feincms.module.medialibrary.models import Category, MediaFile
-from feincms.module.page import processors
+from feincms.module.page.extensions.navigation import PagePretender
 from feincms.module.page.models import Page
-from feincms.templatetags import feincms_tags
+from feincms.module.page.templatetags import feincms_page_tags
 from feincms.translations import short_language_code
 
 from .test_stuff import Empty
@@ -650,79 +650,6 @@ class PagesTestCase(TestCase):
         obj = type()
         obj.text = 'Something'
         self.assertTrue(isinstance(obj.render(), SafeData))
-
-    def test_15_frontend_editing(self):
-        self.create_default_page_set()
-        page = Page.objects.get(pk=1)
-        self.login()
-        self.create_page_through_admincontent(page)
-
-        # this should return a 404
-        self.is_published('/admin/page/page/10|rawcontent|1/', should_be=False)
-        self.is_published('/admin/page/page/1|rawcontent|10/', should_be=False)
-
-        self.assertEqual(
-            self.client.get('/admin/page/page/1|rawcontent|1/').status_code,
-            200)
-        self.assertEqual(self.client.post('/admin/page/page/1|rawcontent|1/', {
-            'rawcontent-text': 'blablabla',
-        }).status_code, 200)
-
-        self.assertEqual(page.content.main[0].render(), 'blablabla')
-        self.assertEqual(feincms_tags.feincms_frontend_editing(page, {}), '')
-
-        request = Empty()
-        request.COOKIES = {'frontend_editing': "True"}
-
-        self.assertIn(
-            'class="fe_box"', page.content.main[0].fe_render(request=request))
-
-    def test_15_b_client_frontend_editing(self):
-        self.create_default_page_set()
-        page = Page.objects.get(pk=1)
-        self.login()
-        self.create_page_through_admincontent(page)
-
-        page.active = True
-        page.template_key = 'theother'
-        page.save()
-
-        # FEINCMS_FRONTEND_EDITING is False by default
-        response = self.client.get(
-            page.get_absolute_url() + '?frontend_editing=1',
-            follow=True)
-        self.assertNotIn('class="fe_box"', response.content.decode('utf-8'))
-        self.assertNotIn('frontend_editing', self.client.cookies)
-
-        # manually register request processor
-        # override_settings(FEINCMS_FRONTEND_EDITING=True) wont work here
-        Page.register_request_processor(
-            processors.frontendediting_request_processor,
-            key='frontend_editing')
-        response = self.client.get(
-            page.get_absolute_url() + '?frontend_editing=1',
-            follow=True)
-        self.assertRedirects(response, page.get_absolute_url())
-        self.assertIn('class="fe_box"', response.content.decode('utf-8'))
-        self.assertIn('frontend_editing', self.client.cookies)
-
-        # turn off edit on site
-        response = self.client.get(
-            page.get_absolute_url() + '?frontend_editing=0',
-            follow=True)
-        self.assertRedirects(response, page.get_absolute_url())
-        self.assertNotIn('class="fe_box"', response.content.decode('utf-8'))
-
-        # anonymous user cannot front edit
-        self.client.logout()
-        response = self.client.get(
-            page.get_absolute_url() + '?frontend_editing=1',
-            follow=True)
-        self.assertRedirects(response, page.get_absolute_url())
-        self.assertNotIn('class="fe_box"', response.content.decode('utf-8'))
-
-        # cleanup request processor
-        del Page.request_processors['frontend_editing']
 
     def test_17_page_template_tags(self):
         self.create_default_page_set()
@@ -1540,10 +1467,11 @@ class PagesTestCase(TestCase):
             zf.writestr('test%d.jpg' % i, 'test%d' % i)
         zf.close()
 
-        response = self.client.post(
-            '/admin/medialibrary/mediafile/mediafile-bulk-upload/', {
-                'data': open('test.zip', 'rb'),
-            })
+        with open('test.zip', 'rb') as handle:
+            response = self.client.post(
+                '/admin/medialibrary/mediafile/mediafile-bulk-upload/', {
+                    'data': handle,
+                })
         self.assertRedirects(response, '/admin/medialibrary/mediafile/')
 
         self.assertEqual(
@@ -1555,17 +1483,18 @@ class PagesTestCase(TestCase):
         path = os.path.join(
             dn(dn(dn(dn(__file__)))), 'docs', 'images', 'tree_editor.png')
 
-        response = self.client.post('/admin/medialibrary/mediafile/add/', {
-            'file': open(path, 'rb'),
-            'translations-TOTAL_FORMS': 0,
-            'translations-INITIAL_FORMS': 0,
-            'translations-MAX_NUM_FORMS': 10,
-        })
+        with open(path, 'rb') as handle:
+            response = self.client.post('/admin/medialibrary/mediafile/add/', {
+                'file': handle,
+                'translations-TOTAL_FORMS': 0,
+                'translations-INITIAL_FORMS': 0,
+                'translations-MAX_NUM_FORMS': 10,
+            })
         self.assertRedirects(response, '/admin/medialibrary/mediafile/')
 
         self.assertContains(
             self.client.get('/admin/medialibrary/mediafile/'),
-            '100x100.png" alt="" />')
+            '100x100')
 
         stats = list(MediaFile.objects.values_list('type', flat=True))
         self.assertEqual(stats.count('image'), 12)
@@ -1628,6 +1557,11 @@ class PagesTestCase(TestCase):
         self.assertNotContains(response, 'some_main_region_text')
         self.assertContains(response, 'some_sidebar_region_text')
         self.assertNotContains(response, 'some content outside')
+
+        response = self.client.get(
+            page.get_absolute_url() + 'inheritance20_unpack/')
+        self.assertContains(response, 'a content 43')
+        self.assertIn('yabba dabba', response['cache-control'])
 
     def test_33_preview(self):
         self.create_default_page_set()
@@ -1773,3 +1707,30 @@ class PagesTestCase(TestCase):
         }))
 
         self.assertEqual(str.strip(), '/test-page/test-child-page/,')
+
+    def test_40_page_is_active(self):
+        self.create_default_page_set()
+
+        page1, page2 = list(Page.objects.order_by('id'))
+
+        self.assertTrue(feincms_page_tags.page_is_active(
+            {'feincms_page': page1}, page1))
+        self.assertTrue(feincms_page_tags.page_is_active(
+            {'feincms_page': page2}, page1))
+        self.assertFalse(feincms_page_tags.page_is_active(
+            {'feincms_page': page1}, page2))
+
+        p = PagePretender(
+            title='bla',
+            slug='bla',
+            url='/test-page/whatsup/')
+
+        self.assertTrue(feincms_page_tags.page_is_active(
+            {}, p, path='/test-page/whatsup/test/'))
+        self.assertFalse(feincms_page_tags.page_is_active(
+            {}, p, path='/test-page/'))
+
+        self.assertTrue(feincms_page_tags.page_is_active(
+            {'feincms_page': page1}, p, path='/test-page/whatsup/test/'))
+        self.assertFalse(feincms_page_tags.page_is_active(
+            {'feincms_page': page2}, p, path='/test-page/'))

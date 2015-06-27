@@ -47,7 +47,7 @@ initialization snippet for the rich text editor. Bundled templates are:
 * ``admin/content/richtext/init_ckeditor.html`` for CKEditor.
 
 ``FEINCMS_RICHTEXT_INIT_CONTEXT``: Defaults to
-``{'TINYMCE_JS_URL': '<<MEDIA_URL>>js/tiny_mce/tiny_mce.js'}``. A dictionary
+``{'TINYMCE_JS_URL': '//tinymce.cachefly.net/4.1/tinymce.min.js'}``. A dictionary
 which is passed to the template mentioned above. Please refer to the templates
 directly to see all available variables.
 
@@ -77,9 +77,6 @@ checking of object level permissions.
 Settings for the page module
 ============================
 
-``FEINCMS_FRONTEND_EDITING``: Defaults to ``False``. Activate this to show
-the frontend editing button in the page change form.
-
 ``FEINCMS_USE_PAGE_ADMIN``: Defaults to ``True``. The page model admin module
 automatically registers the page model with the default admin site if this is
 active. Set to ``False`` if you have to configure the page admin module
@@ -99,6 +96,11 @@ languages.
   and overwrites whatever was set before.
 * ``'EXPLICIT'``: The language set has priority, may only be overridden
   by explicitely a language with ``?set_language=xx``.
+
+``FEINCMS_FRONTEND_LANGUAGES``: Defaults to None; set it to a list of allowed
+language codes in the front end so to allow additional languages in the admin
+back end for preparing those pages while not yet making the available to the
+public.
 
 ``FEINCMS_CMS_404_PAGE``: Defaults to ``None``. Set this if you want the page
 handling mechanism to try and find a CMS page with that path if it encounters
@@ -139,7 +141,3 @@ Various settings
 ``FEINCMS_THUMBNAIL_DIR``: Defaults to ``_thumbs/``. Defines a prefix for media
 file thumbnails. This allows you to easily remove all thumbnails without fear
 of removing files belonging to image and file fields.
-
-``FEINCMS_CHECK_DATABASE_SCHEMA``: Defaults to ``False``. Run the home-grown
-schema checker on the page module. Should not be used anymore, use South or
-Django 1.7's own migrations support.

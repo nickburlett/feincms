@@ -107,3 +107,16 @@ will be issued for at least two releases.
 ====
 
 No deprecations.
+
+
+1.11
+====
+
+* ``RSSContent`` and ``update_rsscontent`` have been deprecated.
+
+* The automatic discovery of subclasses of ``NavigationExtension`` has been
+  replaced with an explicit mechanism of defining navigation extensions.
+
+* ``Page.cache_key`` has never been used by FeinCMS itself and will therefore
+  be removed in a future release. Comparable functionality has been available
+  for a long time with ``Page.path_to_cache_key``.

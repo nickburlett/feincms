@@ -7,6 +7,11 @@ the feincms\_ namespace.
 
 from __future__ import absolute_import, unicode_literals
 
+try:
+    from collections import OrderedDict
+except ImportError:
+    from django.utils.datastructures import SortedDict as OrderedDict
+
 from functools import reduce
 import sys
 import operator
@@ -17,15 +22,12 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connections, models
 from django.db.models import Q
-from django.db.models.loading import get_model
 from django.forms.widgets import Media
-from django.template.loader import render_to_string
-from django.utils.datastructures import SortedDict
 from django.utils.encoding import force_text, python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 
 from feincms import ensure_completely_loaded
-from feincms._internal import get_model_name
+from feincms._internal import get_model
 from feincms.extensions import ExtensionsMixin
 from feincms.utils import copy_model_instance
 
@@ -379,7 +381,7 @@ def create_base_model(inherit_from=models.Model):
             """
 
             if not hasattr(cls, '_feincms_templates'):
-                cls._feincms_templates = SortedDict()
+                cls._feincms_templates = OrderedDict()
                 cls.TEMPLATES_CHOICES = []
 
             instances = cls._feincms_templates
@@ -495,39 +497,6 @@ def create_base_model(inherit_from=models.Model):
 
                 raise NotImplementedError
 
-            def fe_render(self, **kwargs):
-                """
-                Frontend Editing enabled renderer
-                """
-
-                if 'request' in kwargs:
-                    request = kwargs['request']
-
-                    if (hasattr(request, 'COOKIES')
-                            and request.COOKIES.get('frontend_editing')):
-                        return render_to_string('admin/feincms/fe_box.html', {
-                            'content': self.render(**kwargs),
-                            'identifier': self.fe_identifier(),
-                        })
-
-                return self.render(**kwargs)
-
-            def fe_identifier(self):
-                """
-                Returns an identifier which is understood by the frontend
-                editing javascript code. (It is used to find the URL which
-                should be used to load the form for every given block of
-                content.)
-                """
-
-                return '%s-%s-%s-%s-%s' % (
-                    cls._meta.app_label,
-                    get_model_name(cls._meta),
-                    self.__class__.__name__.lower(),
-                    self.parent_id,
-                    self.id,
-                )
-
             def get_queryset(cls, filter_args):
                 return cls.objects.select_related().filter(filter_args)
 
@@ -541,8 +510,6 @@ def create_base_model(inherit_from=models.Model):
                 '__module__': cls.__module__,
                 '__str__': __str__,
                 'render': render,
-                'fe_render': fe_render,
-                'fe_identifier': fe_identifier,
                 'get_queryset': classmethod(get_queryset),
                 'Meta': Meta,
                 'parent': models.ForeignKey(cls, related_name='%(class)s_set'),

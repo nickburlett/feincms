@@ -5,13 +5,13 @@
 from __future__ import absolute_import, unicode_literals
 
 import re
+import warnings
 
 from django.core.cache import cache as django_cache
 from django.core.exceptions import PermissionDenied
 from django.conf import settings as django_settings
 from django.db import models
-from django.db.models import Q, signals
-from django.db.models.loading import get_model
+from django.db.models import Q
 from django.http import Http404
 from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
@@ -19,7 +19,7 @@ from django.utils.translation import ugettext_lazy as _
 from mptt.models import MPTTModel, TreeManager
 
 from feincms import settings
-from feincms.management.checker import check_database_schema
+from feincms._internal import get_model
 from feincms.models import create_base_model
 from feincms.module.mixins import ContentModelMixin
 from feincms.module.page import processors
@@ -213,6 +213,10 @@ class BasePage(create_base_model(MPTTModel), ContentModelMixin):
         if not self.pk:
             return False
 
+        # No need to hit DB if page itself is inactive
+        if not self.active:
+            return False
+
         pages = self.__class__.objects.active().filter(
             tree_id=self.tree_id,
             lft__lte=self.lft,
@@ -344,6 +348,11 @@ class BasePage(create_base_model(MPTTModel), ContentModelMixin):
         This function is here purely for your convenience. FeinCMS itself
         does not use it in any way.
         """
+        warnings.warn(
+            'Page.cache_key has never been used and has therefore been'
+            ' deprecated and will be removed in a future release. Have a'
+            ' look at Page.path_to_cache_key if you require comparable'
+            ' functionality.', DeprecationWarning, stacklevel=2)
         return '-'.join(str(fn(self)) for fn in self.cache_key_components)
 
     def etag(self, request):
@@ -400,7 +409,7 @@ class BasePage(create_base_model(MPTTModel), ContentModelMixin):
         return path_to_cache_key(path.strip('/'), prefix=prefix)
 
     @classmethod
-    def register_default_processors(cls, frontend_editing=False):
+    def register_default_processors(cls):
         """
         Register our default request processors for the out-of-the-box
         Page experience.
@@ -409,14 +418,6 @@ class BasePage(create_base_model(MPTTModel), ContentModelMixin):
             processors.redirect_request_processor, key='redirect')
         cls.register_request_processor(
             processors.extra_context_request_processor, key='extra_context')
-
-        if frontend_editing:
-            cls.register_request_processor(
-                processors.frontendediting_request_processor,
-                key='frontend_editing')
-            cls.register_response_processor(
-                processors.frontendediting_response_processor,
-                key='frontend_editing')
 
 
 # ------------------------------------------------------------------------
@@ -427,13 +428,6 @@ class Page(BasePage):
         verbose_name_plural = _('pages')
         # not yet # permissions = (("edit_page", _("Can edit page metadata")),)
 
-Page.register_default_processors(
-    frontend_editing=settings.FEINCMS_FRONTEND_EDITING)
+Page.register_default_processors()
 
-if settings.FEINCMS_CHECK_DATABASE_SCHEMA:
-    signals.post_syncdb.connect(
-        check_database_schema(Page, __name__),
-        weak=False)
-
-# ------------------------------------------------------------------------
 # ------------------------------------------------------------------------

@@ -1,13 +1,11 @@
 from __future__ import absolute_import
 
-from django.conf.urls import patterns, url
+import warnings
 
-from .views import Handler
+from feincms.urls import urlpatterns, Handler, handler
 
-handler = Handler.as_view()
+__all__ = ('urlpatterns', 'Handler', 'handler')
 
-urlpatterns = patterns(
-    '',
-    url(r'^$', handler, name='feincms_home'),
-    url(r'^(.*)/$', handler, name='feincms_handler'),
-)
+warnings.warn(
+    'feincms.views.cbv has been deprecated. Use feincms.urls and feincms.views'
+    ' directly instead.', DeprecationWarning, stacklevel=2)

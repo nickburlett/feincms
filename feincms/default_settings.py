@@ -86,12 +86,6 @@ FEINCMS_TREE_EDITOR_INCLUDE_ANCESTORS = getattr(
     'FEINCMS_TREE_EDITOR_INCLUDE_ANCESTORS',
     False)
 
-#: Show frontend-editing button?
-FEINCMS_FRONTEND_EDITING = getattr(
-    settings,
-    'FEINCMS_FRONTEND_EDITING',
-    False)
-
 #: Enable checking of object level permissions. Note that if this option is
 #: enabled, you must plug in an authentication backend that actually does
 #: implement object level permissions or no page will be editable.
@@ -107,21 +101,12 @@ FEINCMS_USE_PAGE_ADMIN = getattr(
     'FEINCMS_USE_PAGE_ADMIN',
     True)
 
-#: app_label.model_name as per django.db.models.get_model.
+#: app_label.model_name as per apps.get_model.
 #: defaults to page.Page
 FEINCMS_DEFAULT_PAGE_MODEL = getattr(
     settings,
     'FEINCMS_DEFAULT_PAGE_MODEL',
     'page.Page')
-
-# ------------------------------------------------------------------------
-# Various settings
-
-#: Run the weak replacement for a real database migration solution?
-FEINCMS_CHECK_DATABASE_SCHEMA = getattr(
-    settings,
-    'FEINCMS_CHECK_DATABASE_SCHEMA',
-    False)
 
 # ------------------------------------------------------------------------
 #: Allow random gunk after a valid page?
@@ -212,5 +197,14 @@ FEINCMS_SINGLETON_TEMPLATE_DELETION_ALLOWED = getattr(
     settings,
     'FEINCMS_SINGLETON_TEMPLATE_DELETION_ALLOWED',
     False)
+
+# ------------------------------------------------------------------------
+#: Filter languages available for front end users to this set. This allows
+#: to have languages not yet ready for prime time while being able to access
+#: those pages in the admin backend.
+FEINCMS_FRONTEND_LANGUAGES = getattr(
+    settings,
+    'FEINCMS_FRONTEND_LANGUAGES',
+    None)
 
 # ------------------------------------------------------------------------
